@@ -1,7 +1,7 @@
 Augmented Image Tutorial
 =========================
 This project is (almost) entirely based on Sceneform's [augmented image](github.com/google-ar/sceneform-android-sdk/tree/master/samples/augmentedimage) sample project, with some minor changes.
-It is a demo of the "augmented images" API.
+Its purpose is to demonstrate the "augmented images" API.
 
 ## Prerequisites
 1. Android Studio
