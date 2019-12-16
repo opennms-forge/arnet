@@ -4,6 +4,7 @@ import org.opennms.arnet.api.model.Edge;
 import com.google.ar.sceneform.samples.graph.GraphProvider;
 import org.opennms.arnet.api.model.Vertex;
 
+import java.util.Objects;
 import java.util.function.Consumer;
 
 import edu.uci.ics.jung.graph.Graph;
@@ -53,6 +54,19 @@ public class StaticGraphProviderImpl implements GraphProvider {
         public Type getType() {
             return null;
         }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            MyVertex myVertex = (MyVertex) o;
+            return id == myVertex.id;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(id);
+        }
     }
 
     private static class MyEdge implements Edge {
@@ -84,6 +98,19 @@ public class StaticGraphProviderImpl implements GraphProvider {
         @Override
         public String getProtocol() {
             return null;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            MyEdge myEdge = (MyEdge) o;
+            return Objects.equals(id, myEdge.id);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(id);
         }
     }
 }
