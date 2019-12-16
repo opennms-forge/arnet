@@ -3,29 +3,24 @@ package org.opennms.arnet.app
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import com.google.ar.sceneform.SceneView
-import com.google.ar.sceneform.Scene
-import org.opennms.arnet.app.scenes.GraphNode
+import org.opennms.arnet.app.mock.MockConsumerService
 
 class MainActivity : AppCompatActivity() {
 
-    lateinit var scene: Scene
     lateinit var sceneView : SceneView
+    lateinit var graphManager : GraphManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         sceneView = findViewById(R.id.sceneView)
-        scene = sceneView.scene // get current scene
-        addGraphToScene();
-    }
 
-    /**
-     * Builds the graph and adds it to the current scene.
-     */
-    private fun addGraphToScene() {
-        var node = GraphNode(this)
-        node.render(scene)
-        scene.addChild(node)
+        // Create the graph manager
+        graphManager = GraphManager(this, sceneView.scene)
+
+        // Register the graph manager with the consumer service
+        val svc = MockConsumerService()
+        svc.accept(graphManager)
     }
 
     override fun onPause() {

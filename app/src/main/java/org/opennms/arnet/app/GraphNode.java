@@ -1,4 +1,4 @@
-package org.opennms.arnet.app.scenes;
+package org.opennms.arnet.app;
 
 import android.content.Context;
 import android.util.Log;
@@ -24,6 +24,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 
 import edu.uci.ics.jung.algorithms.layout.FRLayout;
@@ -40,10 +41,8 @@ public class GraphNode extends AnchorNode {
     // The augmented image represented by this node.
     private AugmentedImage image;
 
-    public GraphNode(Context context) {
-        GraphProvider graphProvider = new StaticGraphProviderImpl();
-        // TODO: Handle graph changes
-        g = graphProvider.getAndSubscribe(newG -> {});
+    public GraphNode(Context context, Graph<Vertex, Edge> g) {
+        this.g = Objects.requireNonNull(g);
 
         if (redBall == null) {
             redBall = MaterialFactory.makeOpaqueWithColor(context, new Color(android.graphics.Color.RED))
