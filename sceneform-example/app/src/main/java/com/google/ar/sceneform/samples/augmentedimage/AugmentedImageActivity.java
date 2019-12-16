@@ -22,8 +22,12 @@ import android.view.View;
 import android.widget.ImageView;
 import com.google.ar.core.AugmentedImage;
 import com.google.ar.core.Frame;
+import com.google.ar.core.Plane;
+import com.google.ar.core.TrackingState;
+import com.google.ar.core.exceptions.CameraNotAvailableException;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.FrameTime;
+import com.google.ar.sceneform.SceneView;
 import com.google.ar.sceneform.samples.common.helpers.SnackbarHelper;
 import com.google.ar.sceneform.ux.ArFragment;
 import java.util.Collection;
@@ -44,26 +48,45 @@ import java.util.Map;
 public class AugmentedImageActivity extends AppCompatActivity {
 
   private ArFragment arFragment;
+  private SceneView sceneView;
   private ImageView fitToScanView;
 
   // Augmented image and its associated center pose anchor, keyed by the augmented image in
   // the database.
   private final Map<AugmentedImage, GraphNode> augmentedImageMap = new HashMap<>();
+  private final Map<Plane, GraphNode> augmentedPlaneMap = new HashMap<>();
 
   @Override
   protected void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
     setContentView(R.layout.activity_main);
+   // setContentView(R.layout.activity_main);
 
     arFragment = (ArFragment) getSupportFragmentManager().findFragmentById(R.id.ux_fragment);
     fitToScanView = findViewById(R.id.image_view_fit_to_scan);
+    sceneView = findViewById(R.id.sceneView);
+
+    GraphNode node = new GraphNode(this);
+    //node.render(sceneView);
+   // sceneView.getScene().addChild(node);
 
     arFragment.getArSceneView().getScene().addOnUpdateListener(this::onUpdateFrame);
   }
 
   @Override
+  protected void onPause() {
+    super.onPause();
+    sceneView.pause();
+  }
+
+  @Override
   protected void onResume() {
     super.onResume();
+    try {
+      sceneView.resume();
+    } catch (CameraNotAvailableException e) {
+      throw new RuntimeException(e);
+    }
     if (augmentedImageMap.isEmpty()) {
       fitToScanView.setVisibility(View.VISIBLE);
     }
@@ -82,6 +105,34 @@ public class AugmentedImageActivity extends AppCompatActivity {
       return;
     }
 
+    for (Plane plane : frame.getUpdatedTrackables(Plane.class)) {
+      switch (plane.getTrackingState()) {
+        case PAUSED:
+          // When an image is in PAUSED state, but the camera is not PAUSED, it has been detected,
+          // but not yet tracked.
+          String text = "Detected Plane " + plane;
+          SnackbarHelper.getInstance().showMessage(this, text);
+          break;
+
+        case TRACKING:
+          // Have to switch to UI Thread to update View.
+          fitToScanView.setVisibility(View.GONE);
+
+          // Create a new anchor for newly found images.
+          if (!augmentedPlaneMap.containsKey(plane)) {
+            GraphNode node = new GraphNode(this);
+            node.setImage(plane);
+            augmentedPlaneMap.put(plane, node);
+            arFragment.getArSceneView().getScene().addChild(node);
+          }
+          break;
+
+        case STOPPED:
+          augmentedPlaneMap.remove(plane);
+          break;
+      }
+
+    }
 
 
     Collection<AugmentedImage> updatedAugmentedImages =

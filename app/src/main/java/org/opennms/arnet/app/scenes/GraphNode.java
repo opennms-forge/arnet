@@ -1,4 +1,4 @@
-package com.google.ar.sceneform.samples.augmentedimage;
+package org.opennms.arnet.app.scenes;
 
 import android.content.Context;
 import android.util.Log;
@@ -6,14 +6,15 @@ import android.util.Log;
 import com.google.ar.core.AugmentedImage;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.Node;
+import com.google.ar.sceneform.Scene;
 import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
 import com.google.ar.sceneform.rendering.Color;
 import com.google.ar.sceneform.rendering.MaterialFactory;
 import com.google.ar.sceneform.rendering.ModelRenderable;
 import com.google.ar.sceneform.rendering.ShapeFactory;
+
 import org.opennms.arnet.api.model.Edge;
-import com.google.ar.sceneform.samples.graph.GraphProvider;
 import org.opennms.arnet.api.model.Vertex;
 
 import java.awt.Dimension;
@@ -34,7 +35,6 @@ public class GraphNode extends AnchorNode {
 
     private final Graph<Vertex, Edge> g;
     private static CompletableFuture<ModelRenderable> redBall;
-    private static CompletableFuture<ModelRenderable> cylinder;
     private static CompletableFuture<ModelRenderable> cube;
 
     // The augmented image represented by this node.
@@ -48,8 +48,6 @@ public class GraphNode extends AnchorNode {
         if (redBall == null) {
             redBall = MaterialFactory.makeOpaqueWithColor(context, new Color(android.graphics.Color.RED))
                     .thenApply(material -> ShapeFactory.makeCube(new Vector3(0.1f, 0.1f, 0.1f), new Vector3(0.0f, 0.0f, 0.0f), material));
-            cylinder = MaterialFactory.makeOpaqueWithColor(context, new Color(android.graphics.Color.BLUE))
-                    .thenApply(material -> ShapeFactory.makeCylinder(0.05f, 0.1f, new Vector3(0.0f, 0.0f, 0.0f), material));
             cube = MaterialFactory.makeOpaqueWithColor(context, new Color(android.graphics.Color.WHITE))
                     .thenApply(
                             material -> ShapeFactory.makeCube(new Vector3(.01f, .01f, .01f),
@@ -57,21 +55,17 @@ public class GraphNode extends AnchorNode {
         }
     }
 
-    /**
-     * Called when the AugmentedImage is detected and should be rendered.
-     *
-     * There is no need to worry about world coordinates since everything is
-     * relative to the center of the image, which is the parent node of the corners.
-     */
-    @SuppressWarnings({"AndroidApiChecker", "FutureReturnValueIgnored"})
-    public void setImage(AugmentedImage image) {
-        this.image = image;
+    public void render(Scene scene) {
+        setParent(scene);
+        setLocalPosition(new Vector3(0f, 0f, -1f));
+        setLocalScale(new Vector3(6f, 6f, 6f));
 
-        // If any of the models are not loaded, then recurse when all are loaded.
-        if (!redBall.isDone() || !cube.isDone() || !cylinder.isDone()) {
+        if (!redBall.isDone() || !cube.isDone()) {
             Log.i(TAG, "Waiting for renderables...");
-            CompletableFuture.allOf(redBall, cube, cylinder)
-                    .thenAccept((Void aVoid) -> setImage(image))
+            CompletableFuture.allOf(redBall, cube)
+                    .thenAccept(aVoid -> {
+                        render(scene);
+                    })
                     .exceptionally(
                             throwable -> {
                                 Log.e(TAG, "Exception loading", throwable);
@@ -79,19 +73,12 @@ public class GraphNode extends AnchorNode {
                             });
         }
 
-        // Set the anchor based on the center of the image.
-        setAnchor(image.createAnchor(image.getCenterPose()));
-
         Dimension size = new Dimension(1,1);
         FRLayout<Vertex, Edge> layout = new FRLayout<>(g);
         // Manually create the initializer so that we can used a fixed seed
         layout.setInitializer(new RandomLocationTransformer<>(size, 0));
         layout.setSize(new Dimension(1,1));
-       // layout.setRepulsionMultiplier(0.5f);
         layout.initialize();
-
-        // Upper left corner.
-        Vector3 upperLeftCorner = new Vector3(-image.getExtentX(), 0.0f, -image.getExtentZ());
 
         final Map<Vertex, Node> vertexToSceneNode = new HashMap<>();
         for (Vertex vertex : g.getVertices()) {
@@ -106,7 +93,6 @@ public class GraphNode extends AnchorNode {
             testNode.setParent(this);
             testNode.setLocalPosition(localPosition);
             testNode.setRenderable(redBall.getNow(null));
-            // testNode.setLocalScale(new Vector3(0.5f, 0.5f, 0.5f));
             testNode.setWorldScale(new Vector3(0.1f, 0.1f, 0.1f));
 
             // Store the node for future lookups

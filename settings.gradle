@@ -1,5 +1,2 @@
 include ':app'
-
-// Uncomment to include the source version of the ux package in your project.
-//include ':sceneformux'
-//project(':sceneformux').projectDir=new File('../../sceneformux/ux')
+rootProject.name='ARNet'
