@@ -38,6 +38,21 @@ public class StaticGraphProviderImpl implements GraphProvider {
         public static MyVertex forId(int id) {
             return new MyVertex(id);
         }
+
+        @Override
+        public String getId() {
+            return Integer.toString(id);
+        }
+
+        @Override
+        public String getLabel() {
+            return null;
+        }
+
+        @Override
+        public Type getType() {
+            return null;
+        }
     }
 
     private static class MyEdge implements Edge {
@@ -51,5 +66,24 @@ public class StaticGraphProviderImpl implements GraphProvider {
             return new MyEdge(id);
         }
 
+        @Override
+        public String getId() {
+            return id;
+        }
+
+        @Override
+        public Vertex getSourceVertex() {
+            return null;
+        }
+
+        @Override
+        public Vertex getTargetVertex() {
+            return null;
+        }
+
+        @Override
+        public String getProtocol() {
+            return null;
+        }
     }
 }
