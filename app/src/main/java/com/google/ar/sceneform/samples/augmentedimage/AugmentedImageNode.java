@@ -22,8 +22,13 @@ import android.util.Log;
 import com.google.ar.core.AugmentedImage;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.Node;
+import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
+import com.google.ar.sceneform.rendering.Color;
+import com.google.ar.sceneform.rendering.MaterialFactory;
 import com.google.ar.sceneform.rendering.ModelRenderable;
+import com.google.ar.sceneform.rendering.ShapeFactory;
+
 import java.util.concurrent.CompletableFuture;
 
 /**
@@ -46,6 +51,7 @@ public class AugmentedImageNode extends AnchorNode {
   private static CompletableFuture<ModelRenderable> lrCorner;
   private static CompletableFuture<ModelRenderable> llCorner;
   private static CompletableFuture<ModelRenderable> center;
+  private static CompletableFuture<ModelRenderable> redBall;
 
   public AugmentedImageNode(Context context) {
     // Upon construction, start loading the models for the corners of the frame.
@@ -69,6 +75,11 @@ public class AugmentedImageNode extends AnchorNode {
       center = ModelRenderable.builder()
               .setSource(context, Uri.parse("models/Kiwi.sfb"))
               .build();
+      redBall = MaterialFactory.makeOpaqueWithColor(context, new Color(android.graphics.Color.RED))
+              .thenApply(
+                      material -> {
+                        return
+                                ShapeFactory.makeSphere(0.1f, new Vector3(0.0f, 0.15f, 0.0f), material); });
     }
   }
 
@@ -133,7 +144,10 @@ public class AugmentedImageNode extends AnchorNode {
     Node testNode = new Node();
     testNode.setParent(this);
     testNode.setLocalPosition(localPosition);
-    testNode.setRenderable(center.getNow(null));
+    testNode.setRenderable(redBall.getNow(null));
+   // testNode.setLocalScale(new Vector3(0.5f, 0.5f, 0.5f));
+    testNode.setWorldScale(new Vector3(0.1f, 0.1f, 0.1f));
+    testNode.setWorldRotation(Quaternion.eulerAngles(new Vector3(0, (float)Math.PI / 2, 0)));
   }
 
   public AugmentedImage getImage() {
