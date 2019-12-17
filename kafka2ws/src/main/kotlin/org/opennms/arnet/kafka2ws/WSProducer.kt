@@ -13,12 +13,12 @@ import java.util.*
 class WSProducer(private val mapper: ObjectMapper, private val broadcaster: WebSocketBroadcaster) {
 
     @OnMessage
-    fun onMessage(message: WSRequest, session: WebSocketSession) {
+    fun onMessage(message: ArnetRequest, session: WebSocketSession) {
         val alarmA = Alarm("a", Severity.CRITICAL, "a-desc", Date(), "a-id")
         val alarmB = Alarm("b", Severity.CRITICAL, "b-desc", Date(), "b-id")
-        val situationAlarm = Alarm("situation-a-b", Severity.CRITICAL, "situation-descr", Date(), "situation-id")
-        val testSituation = Situation(setOf(alarmA, alarmB), situationAlarm)
-        session.sendSync(testSituation)
+        val testSituation = Situation(setOf(alarmA, alarmB), Alarm("situation-a-b", Severity.CRITICAL, "situation-descr", Date(), "situation-id"))
+        val testTopology = Topology(alarms = setOf(alarmA, alarmB), situations = setOf(testSituation))
+        session.sendSync(topologyResponse(testTopology))
     }
 
     @OnClose
