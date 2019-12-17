@@ -1,14 +1,17 @@
 package org.opennms.arnet.app
 
 import android.os.Bundle
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import com.google.ar.sceneform.SceneView
 import org.opennms.arnet.app.mock.MockConsumerService
+import org.opennms.arnet.WebSocketConsumerService
 
 class MainActivity : AppCompatActivity() {
 
     lateinit var sceneView : SceneView
     lateinit var graphManager : GraphManager
+    private val consumerService = WebSocketConsumerService().apply { start() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -19,7 +22,7 @@ class MainActivity : AppCompatActivity() {
         graphManager = GraphManager(this, sceneView.scene)
 
         // Register the graph manager with the consumer service
-        val svc = MockConsumerService()
+        val svc = consumerService
         svc.accept(graphManager)
     }
 
@@ -31,5 +34,14 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         sceneView.resume()
+    }
+
+    override fun onDestroy() {
+        consumerService.stop()
+        super.onDestroy()
+    }
+
+    companion object {
+        private val TAG = "MainActivity"
     }
 }

@@ -75,4 +75,12 @@ public class MockConsumerService implements ConsumerService {
             consumers.add(consumer);
         }
     }
+
+    @Override
+    public void start() {
+    }
+
+    @Override
+    public void stop() {
+    }
 }

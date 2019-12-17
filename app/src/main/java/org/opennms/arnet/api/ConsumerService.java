@@ -4,4 +4,8 @@ public interface ConsumerService {
 
     void accept(Consumer consumer);
 
+    void start();
+
+    void stop();
+
 }

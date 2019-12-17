@@ -1,10 +1,10 @@
 package org.opennms.arnet.app
 
 import android.content.Context
-import com.google.ar.core.Frame
 import com.google.ar.sceneform.FrameTime
 import com.google.ar.sceneform.Scene
 import edu.uci.ics.jung.graph.Graph
+import edu.uci.ics.jung.graph.SparseMultigraph
 import org.opennms.arnet.api.Consumer
 import org.opennms.arnet.api.model.*
 import java.util.concurrent.atomic.AtomicBoolean
@@ -12,6 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class GraphManager(private val context: Context,private val scene: Scene) : Consumer, Scene.OnUpdateListener {
     var didGraphChange: AtomicBoolean = AtomicBoolean(false)
     lateinit var graphNode : GraphNode
+    var graph: Graph<Vertex, Edge>? = SparseMultigraph()
 
 
     init {
@@ -23,9 +24,13 @@ class GraphManager(private val context: Context,private val scene: Scene) : Cons
      */
     override fun onUpdate(frameTime: FrameTime?) {
        if (didGraphChange.get()) {
-           didGraphChange.set(false);
+           didGraphChange.set(false)
 
-           graphNode.render(scene);
+           graphNode = GraphNode(context, graph)
+           graphNode.render(scene)
+           if (!::graphNode.isInitialized) {
+               scene.addChild(this.graphNode)
+           }
        }
     }
 
@@ -34,11 +39,8 @@ class GraphManager(private val context: Context,private val scene: Scene) : Cons
         alarms: MutableCollection<Alarm>?,
         situations: MutableCollection<Situation>?
     ) {
-        if (!::graphNode.isInitialized) {
-            graphNode = GraphNode(context, graph);
-            graphNode.render(scene);
-            scene.addChild(this.graphNode);
-        }
+        this.graph = graph
+        didGraphChange.set(true)
     }
 
     override fun acceptEdge(e: Edge?) {
