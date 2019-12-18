@@ -35,6 +35,7 @@ class WebSocketConsumerService : ConsumerService {
     override fun start() {
         Log.i(TAG, "Attempting to connect...")
 
+        // TODO: this would be better with a retry mechanism...
         try {
             client.connectBlocking(1, TimeUnit.SECONDS)
         } catch (e: InterruptedException) {
@@ -95,19 +96,37 @@ class WebSocketConsumerService : ConsumerService {
         fun processAlarm(response: ArnetResponse) {
             val alarm = mapper.convertValue<Alarm>(response.payload)
             Log.i(TAG, "Processing alarm ${alarm.reductionKey}")
-            consumers.forEach { c -> c.acceptAlarm(convertAlarm(alarm)) }
+            consumers.forEach { c ->
+                try {
+                    c.acceptAlarm(convertAlarm(alarm))
+                } catch (e: Error) {
+                    Log.e(TAG, "Consumer unable to process alarm ${alarm.reductionKey} : $e")
+                }
+            }
         }
 
         fun processEdge(response: ArnetResponse) {
             val edge = mapper.convertValue<Edge>(response.payload)
             Log.i(TAG, "Processing edge ${edge.id}")
-            consumers.forEach { c -> c.acceptEdge(convertEdge(edge)) }
+            consumers.forEach { c ->
+                try {
+                    c.acceptEdge(convertEdge(edge))
+                } catch (e: Error) {
+                    Log.e(TAG, "Consumer unable to process edge ${edge.id} : $e")
+                }
+            }
         }
 
         fun processEvent(response: ArnetResponse) {
             val event = mapper.convertValue<Event>(response.payload)
             Log.i(TAG, "Processing event ${event.UEI}")
-            consumers.forEach { c -> c.acceptEvent(convertEvent(event)) }
+            consumers.forEach { c ->
+                try {
+                    c.acceptEvent(convertEvent(event))
+                } catch (e: Error) {
+                    Log.e(TAG, "Consumer unable to process event ${event.UEI} : $e")
+                }
+            }
         }
 
         fun processTopology(response: ArnetResponse) {
@@ -127,21 +146,40 @@ class WebSocketConsumerService : ConsumerService {
                 graph.addEdge(em, em.sourceVertex, em.targetVertex)
             }
 
-            consumers.forEach { c -> c.accept(graph,
-                topology.alarms?.map { a -> convertAlarm(a) },
-                topology.situations?.map{ s -> convertSituation(s) }) }
+            consumers.forEach { c ->
+                try {
+                    c.accept(graph,
+                        topology.alarms?.map { a -> convertAlarm(a) },
+                        topology.situations?.map { s -> convertSituation(s) })
+                } catch (e: Error) {
+                    Log.e(TAG, "Consumer unable to process topology : $e")
+                }
+            }
         }
 
         fun processSituation(response: ArnetResponse) {
             val situation = mapper.convertValue<Situation>(response.payload)
             Log.i(TAG, "Processing situation ${situation.alarm.reductionKey}")
-            consumers.forEach { c -> c.acceptSituation(convertSituation(situation)) }
+            consumers.forEach { c ->
+                try {
+                    c.acceptSituation(convertSituation(situation))
+                } catch (e: Error) {
+                    Log.e(TAG, "Consumer unable to process situation " +
+                                "${situation.alarm.reductionKey} : $e")
+                }
+            }
         }
 
         fun processVertex(response: ArnetResponse) {
             val vertex = mapper.convertValue<Vertex>(response.payload)
             Log.i(TAG, "Processing vertex ${vertex.id}")
-            consumers.forEach { c -> c.acceptVertex(convertVertex(vertex)) }
+            consumers.forEach { c ->
+                try {
+                    c.acceptVertex(convertVertex(vertex))
+                } catch (e: Error) {
+                    Log.e(TAG, "Consumer unable to process vertex ${vertex.id} : $e")
+                }
+            }
         }
 
         fun convertAlarm(alarm: Alarm) : org.opennms.arnet.api.model.Alarm {
