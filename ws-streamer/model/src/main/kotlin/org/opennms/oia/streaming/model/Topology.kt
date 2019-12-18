@@ -1,8 +1,14 @@
 package org.opennms.oia.streaming.model
 
+import com.fasterxml.jackson.annotation.JsonInclude
+import org.opennms.integration.api.v1.model.Alarm
+import org.opennms.integration.api.v1.model.Node
+import org.opennms.integration.api.v1.model.TopologyEdge
+
+@JsonInclude(JsonInclude.Include.NON_NULL)
 data class Topology(
-    val vertices: Set<Vertex>? = null,
-    val edges: Set<Edge>? = null,
+    val nodes: Set<Node>? = null,
+    val edges: Set<TopologyEdge>? = null,
     val alarms: Set<Alarm>? = null,
-    val situations: Set<Situation>? = null
+    val situations: Set<Alarm>? = null
 )

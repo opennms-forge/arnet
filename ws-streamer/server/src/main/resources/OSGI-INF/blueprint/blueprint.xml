@@ -7,8 +7,12 @@
         </cm:default-properties>
     </cm:property-placeholder>
 
-    <bean id="websocketStreamer" class="org.opennms.oia.streaming.WebsocketStreamer" init-method="init"
+    <reference id="alarmDao" interface="org.opennms.integration.api.v1.dao.AlarmDao" />
+    
+    <bean id="websocketServer" class="org.opennms.oia.streaming.OiaWebSocketServer" init-method="init"
           destroy-method="destroy">
         <argument value="${wsPort}"/>
+        <argument ref="alarmDao"/>
     </bean>
+    <service ref="websocketServer" interface="org.opennms.integration.api.v1.alarms.AlarmLifecycleListener"/>
 </blueprint>
