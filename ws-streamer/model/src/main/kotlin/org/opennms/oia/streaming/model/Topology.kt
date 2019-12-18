@@ -9,6 +9,5 @@ import org.opennms.integration.api.v1.model.TopologyEdge
 data class Topology(
     val nodes: Set<Node>? = null,
     val edges: Set<TopologyEdge>? = null,
-    val alarms: Set<Alarm>? = null,
-    val situations: Set<Alarm>? = null
+    val alarms: Set<Alarm>? = null
 )

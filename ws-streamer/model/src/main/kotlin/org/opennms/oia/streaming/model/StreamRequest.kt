@@ -1,7 +1,5 @@
 package org.opennms.oia.streaming.model
 
-import com.fasterxml.jackson.annotation.JsonInclude
-
 enum class RequestAction {
     SUBSCRIBE,
     UNSUBSCRIBE
