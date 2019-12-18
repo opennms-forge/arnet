@@ -79,6 +79,13 @@ public class MockConsumerService implements ConsumerService {
     }
 
     @Override
+    public void dismiss(Consumer consumer) {
+        synchronized (consumers) {
+            consumers.remove(consumer);
+        }
+    }
+
+    @Override
     public void start() {
     }
 

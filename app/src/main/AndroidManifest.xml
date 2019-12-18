@@ -4,6 +4,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.CAMERA"/>
 
     <application
         android:allowBackup="true"
@@ -19,6 +20,11 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Indicates that this app requires Google Play Services for AR ("AR Required") and causes
+        the Google Play Store to download and intall Google Play Services for AR along with
+        the app. For an "AR Optional" app, specify "optional" instead of "required". -->
+        <meta-data android:name="com.google.ar.core" android:value="optional" />
     </application>
 
 </manifest>

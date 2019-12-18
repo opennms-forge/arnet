@@ -2,12 +2,14 @@ package org.opennms.arnet.app.scene;
 
 import android.util.Log;
 
+import com.google.ar.core.AugmentedImage;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.FrameTime;
 import com.google.ar.sceneform.Scene;
 import com.google.ar.sceneform.math.Vector3;
 import com.google.ar.sceneform.utilities.AndroidPreconditions;
 
+import org.jetbrains.annotations.Nullable;
 import org.opennms.arnet.api.ConsumerService;
 import org.opennms.arnet.app.domain.InventoryEdge;
 import org.opennms.arnet.app.domain.InventoryVertex;
@@ -16,14 +18,18 @@ import org.opennms.arnet.app.domain.NetworkManager;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, NetworkListenerDelegate.Visitor {
     private static final String TAG = "NetworkNode";
+
+    private boolean destroyed = false;
 
     private final Scene scene;
     private final RenderableRegistry renderables;
 
     private final ConsumerService consumerService;
+    private NetworkManager networkManager;
     private NetworkListenerDelegate delegate;
 
     private final Map<String, InventoryNode> inventoryNodesById = new LinkedHashMap<>();
@@ -43,17 +49,29 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
         });
     }
 
-    private void doInit() {
-        if (!AndroidPreconditions.isUnderTesting()) {
-            setParent(scene);
+    public void setImage(AugmentedImage image) {
+        // Set the anchor based on the center of the image.
+        setAnchor(image.createAnchor(image.getCenterPose()));
+    }
+
+    public synchronized void destroy() {
+        destroyed = true;
+        scene.removeOnUpdateListener(this);
+        if (networkManager != null) {
+            consumerService.dismiss(networkManager);
         }
-        setLocalPosition(new Vector3(0f, 0f, -1f));
-        setLocalScale(new Vector3(6f, 6f, 6f));
+    }
+
+    private synchronized void doInit() {
+        if (destroyed) {
+            return;
+        }
+
         scene.addOnUpdateListener(this);
 
         // Create and register the Network manager
         delegate = new NetworkListenerDelegate();
-        final NetworkManager networkManager = new NetworkManager(delegate);
+        networkManager = new NetworkManager(delegate);
         consumerService.accept(networkManager);
     }
 

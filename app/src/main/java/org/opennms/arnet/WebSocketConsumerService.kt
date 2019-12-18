@@ -32,6 +32,11 @@ class WebSocketConsumerService : ConsumerService {
         consumers.add(consumer)
     }
 
+    override fun dismiss(consumer: Consumer?) {
+        Log.i(TAG, "Removing consumer.")
+        consumers.remove(consumer)
+    }
+
     override fun start() {
         Log.i(TAG, "Attempting to connect...")
 
