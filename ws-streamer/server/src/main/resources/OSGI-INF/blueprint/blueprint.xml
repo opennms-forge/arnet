@@ -1,0 +1,25 @@
+<blueprint xmlns="http://www.osgi.org/xmlns/blueprint/v1.0.0"
+           xmlns:cm="http://aries.apache.org/blueprint/xmlns/blueprint-cm/v1.1.0" >
+    <cm:property-placeholder id="streamingProperties" persistent-id="org.opennms.oia.streaming.properties"
+                             update-strategy="reload">
+        <cm:default-properties>
+            <cm:property name="wsPort" value="8083" />
+        </cm:default-properties>
+    </cm:property-placeholder>
+
+    <reference id="alarmDao" interface="org.opennms.integration.api.v1.dao.AlarmDao" />
+    <reference id="nodeDao" interface="org.opennms.integration.api.v1.dao.NodeDao" />
+    <reference id="edgeDao" interface="org.opennms.integration.api.v1.dao.EdgeDao" />
+    <reference id="eventService" interface="org.opennms.integration.api.v1.events.EventSubscriptionService" />
+    
+    <bean id="websocketServer" class="org.opennms.oia.streaming.OiaWebSocketServer" init-method="init"
+          destroy-method="destroy">
+        <argument value="${wsPort}"/>
+        <argument ref="alarmDao"/>
+        <argument ref="nodeDao"/>
+        <argument ref="edgeDao"/>
+        <argument ref="eventService"/>
+    </bean>
+    <service ref="websocketServer" interface="org.opennms.integration.api.v1.alarms.AlarmLifecycleListener"/>
+    <service ref="websocketServer" interface="org.opennms.integration.api.v1.topology.TopologyEdgeConsumer"/>
+</blueprint>
