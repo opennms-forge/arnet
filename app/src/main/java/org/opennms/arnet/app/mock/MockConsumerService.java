@@ -36,13 +36,15 @@ public class MockConsumerService implements ConsumerService {
         g.addVertex(v2);
         Vertex v3 = MyVertex.forId(3);
         g.addVertex(v3);
-        g.addEdge(MyEdge.forId("Edge-1-2"), v1, v2);
-        g.addEdge(MyEdge.forId("Edge-2-3"), v2, v3);
+        g.addEdge(MyEdge.forId("Edge-1-2", v1, v2), v1, v2);
+        g.addEdge(MyEdge.forId("Edge-2-3", v2, v3), v2, v3);
 
         // Setup for generation
         lastVertex.set(v3);
         nextId.set(4);
+    }
 
+    public void updateGraphOnBackgroundThread() {
         // Every 1 sec, add another vertex and edge
         Timer t = new Timer();
         t.schedule(new TimerTask() {
@@ -51,7 +53,7 @@ public class MockConsumerService implements ConsumerService {
                 // Generate the vertex and edge
                 MyVertex v = MyVertex.forId(nextId.getAndIncrement());
                 g.addVertex(v);
-                Edge e = MyEdge.forId(String.format("Edge-%s-%s", lastVertex.get().getId(), v.getId()));
+                Edge e = MyEdge.forId(String.format("Edge-%s-%s", lastVertex.get().getId(), v.getId()), lastVertex.get(), v);
                 g.addEdge(e, lastVertex.get(), v);
 
                 // Notify the consumers

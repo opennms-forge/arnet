@@ -7,13 +7,17 @@ import java.util.Objects;
 
 public class MyEdge implements Edge {
     private final String id;
+    private final Vertex source;
+    private final Vertex target;
 
-    public MyEdge(String id) {
-        this.id = id;
+    public MyEdge(String id, Vertex source, Vertex target) {
+        this.id = Objects.requireNonNull(id);
+        this.source = Objects.requireNonNull(source);
+        this.target = Objects.requireNonNull(target);
     }
 
-    public static MyEdge forId(String id) {
-        return new MyEdge(id);
+    public static Edge forId(String id, Vertex source, Vertex target) {
+        return new MyEdge(id, source, target);
     }
 
     @Override
@@ -23,12 +27,12 @@ public class MyEdge implements Edge {
 
     @Override
     public Vertex getSourceVertex() {
-        return null;
+        return source;
     }
 
     @Override
     public Vertex getTargetVertex() {
-        return null;
+        return target;
     }
 
     @Override
@@ -41,11 +45,13 @@ public class MyEdge implements Edge {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         MyEdge myEdge = (MyEdge) o;
-        return Objects.equals(id, myEdge.id);
+        return Objects.equals(id, myEdge.id) &&
+                Objects.equals(source, myEdge.source) &&
+                Objects.equals(target, myEdge.target);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id);
+        return Objects.hash(id, source, target);
     }
 }
