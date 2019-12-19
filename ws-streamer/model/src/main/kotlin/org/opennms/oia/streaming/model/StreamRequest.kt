@@ -1,5 +1,7 @@
 package org.opennms.oia.streaming.model
 
+import com.fasterxml.jackson.annotation.JsonInclude
+
 enum class RequestAction {
     SUBSCRIBE,
     UNSUBSCRIBE
@@ -7,6 +9,7 @@ enum class RequestAction {
 
 data class FilterCriteria(val locations: Set<String>? = null)
 
+@JsonInclude(JsonInclude.Include.NON_NULL)
 data class StreamRequest(val action: RequestAction, val criteria: FilterCriteria? = null)
 
 // Use these to generate a request
