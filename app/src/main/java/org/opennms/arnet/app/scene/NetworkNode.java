@@ -121,8 +121,6 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
     public void onLayoutRecalculated() {
         // Inherit the vertex positions from the layout
         inventoryNodesById.values().forEach(InventoryNode::inheritPositionFromLayout);
-        // Connectors should track the vertices
-        connectorNodesById.values().forEach(ConnectorNode::trackSourceAndTargetVertices);
     }
 
     @Override
@@ -131,6 +129,10 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
         for (NetworkListenerDelegate.Task task : delegate.getTasks()) {
             task.visit(this);
         }
+        // Connectors should always track the vertices
+        // TODO: Can we optimize this by performing it only if the layout has changed
+        // or if an animation is in progress?
+        connectorNodesById.values().forEach(ConnectorNode::trackSourceAndTargetVertices);
     }
 
 }

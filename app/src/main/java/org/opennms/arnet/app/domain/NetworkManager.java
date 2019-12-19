@@ -19,7 +19,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentSkipListSet;
 
 import edu.uci.ics.jung.graph.Graph;
 import edu.uci.ics.jung.graph.SparseMultigraph;
@@ -33,7 +32,7 @@ public class NetworkManager implements Consumer {
     private final Map<String, InventoryEdge> inventoryEdgesById = new LinkedHashMap<>();
     private final NetworkListener listener;
 
-    private LayoutStrategy layoutStrategy = new FRLayoutStrategy();
+    private LayoutStrategy layoutStrategy = new ForceBasedLayoutStrategy();
 
     public NetworkManager(NetworkListener listener) {
         this.listener = Objects.requireNonNull(listener);

@@ -31,7 +31,7 @@ public class NetworkManagerTest implements NetworkListener {
         assertThat(edges, hasSize(2));
     }
 
-    private Matcher<InventoryVertex> hasPosition(float x, float y) {
+    public static Matcher<InventoryVertex> hasPosition(float x, float y) {
         final float delta = 0.001f;
         return new BaseMatcher<InventoryVertex>() {
 

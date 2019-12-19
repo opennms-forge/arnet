@@ -65,7 +65,7 @@ public class MockConsumerService implements ConsumerService {
                 }
 
                 // Ready for next iteration
-                lastVertex.set(v);
+               // lastVertex.set(v);
             }
         }, 1000, 1000);
     }
