@@ -3,6 +3,8 @@ package org.opennms.arnet
 import android.util.Log
 import com.fasterxml.jackson.module.kotlin.convertValue
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
+import com.fasterxml.jackson.module.kotlin.readValue
+import com.google.common.collect.Maps
 import edu.uci.ics.jung.graph.Graph
 import edu.uci.ics.jung.graph.SparseMultigraph
 
@@ -17,6 +19,7 @@ import java.io.PrintWriter
 import java.io.StringWriter
 
 import java.net.URI
+import java.nio.ByteBuffer
 import java.util.*
 
 import java.util.concurrent.CopyOnWriteArrayList
@@ -29,6 +32,8 @@ class WebSocketConsumerService : ConsumerService {
     private val consumers = CopyOnWriteArrayList<Consumer>()
 
     private val mapper = jacksonObjectMapper()
+
+    private val oiaMapper = oiaDeserializer
 
     private val vertices = mutableMapOf<String, Vertex>()
 
@@ -75,22 +80,29 @@ class WebSocketConsumerService : ConsumerService {
 
         override fun onOpen(handshakedata: ServerHandshake) {
             Log.i(TAG, "open: status '${handshakedata.httpStatus}'")
-            send(mapper.writeValueAsString(StreamRequest(RequestAction.SUBSCRIBE, FILTER_CRITERIA)))
+            send(mapper.writeValueAsString(StreamRequest(RequestAction.SUBSCRIBE/*, FILTER_CRITERIA*/)))
         }
 
         override fun onMessage(message: String) {
-            Log.d(TAG, "message: $message")
+            Log.i(TAG, "message: $message")
 
-            val response : StreamMessage = mapper.readValue(message, StreamMessage::class.java)
+            val response = mapper.readValue<StreamMessage>(message)
 
             when(response.type) {
                 MessageType.Alarm -> processAlarm(response)
+                MessageType.AlarmDelete -> processAlarmDelete(response)
                 MessageType.Edge -> processEdge(response)
+                MessageType.EdgeDelete -> processEdgeDelete(response)
                 MessageType.Event -> processEvent(response)
                 MessageType.Topology -> processTopology(response)
                 MessageType.Node -> processNode(response)
                 else -> Log.e(TAG, "Unsupported message type '${response.type}'")
             }
+        }
+
+        override fun onMessage(bytes: ByteBuffer?) {
+            requireNotNull(bytes)
+            onMessage(String(bytes.array()))
         }
 
         override fun onClose(code: Int, reason: String, remote: Boolean) {
@@ -104,8 +116,8 @@ class WebSocketConsumerService : ConsumerService {
         }
     }
 
-    fun processAlarm(response: StreamMessage) {
-        val alarm = mapper.convertValue<Alarm>(response.payload)
+    fun processAlarm(message: StreamMessage) {
+        val alarm = oiaMapper.convertValue<Alarm>(message.payload)
         Log.i(TAG, "Processing alarm ${alarm.reductionKey}")
         consumers.forEach { c ->
             try {
@@ -120,8 +132,24 @@ class WebSocketConsumerService : ConsumerService {
         }
     }
 
-    fun processEdge(response: StreamMessage) {
-        val edge = mapper.convertValue<TopologyEdge>(response.payload)
+    fun processAlarmDelete(message: StreamMessage) {
+        val alarm = oiaMapper.convertValue<AlarmDelete>(message.payload)
+        Log.i(TAG, "Processing alarm deletion ${alarm.reductionKey}")
+        consumers.forEach { c ->
+            try {
+                if (alarm.isSituation) {
+                    c.acceptDeleteSituation(alarm.reductionKey)
+                } else {
+                    c.acceptDeletedAlarm(alarm.reductionKey)
+                }
+            } catch (er: Error) {
+                Log.e(TAG, "Consumer unable to process alarm delete ${alarm.reductionKey} : $er")
+            }
+        }
+    }
+
+    fun processEdge(message: StreamMessage) {
+        val edge = oiaMapper.convertValue<TopologyEdge>(message.payload)
         Log.i(TAG, "Processing edge ${edge.id}")
         val ve = convertTopologyEdge(edge)
 
@@ -129,7 +157,7 @@ class WebSocketConsumerService : ConsumerService {
             try {
                 if (vertices.containsKey(ve.vertices.src.id)) {
                     Log.d(TAG, "Update to vertex ${ve.vertices.src.id}")
-                    // TODO: currently not supported...
+                    // TODO: is this supported?
                 } else {
                     Log.d(TAG, "New vertex ${ve.vertices.src.id}")
                     vertices.put(ve.vertices.src.id, ve.vertices.src)
@@ -138,7 +166,7 @@ class WebSocketConsumerService : ConsumerService {
 
                 if (vertices.containsKey(ve.vertices.dst.id)) {
                     Log.d(TAG, "Update to vertex ${ve.vertices.dst.id}")
-                    // TODO: currently not supported...
+                    // TODO: is this supported?
                 } else {
                     Log.d(TAG, "New vertex ${ve.vertices.dst.id}")
                     vertices.put(ve.vertices.dst.id, ve.vertices.dst)
@@ -147,7 +175,7 @@ class WebSocketConsumerService : ConsumerService {
 
                 if (edges.containsKey(ve.edge.id)) {
                     Log.d(TAG, "Update to edge ${ve.edge.id}")
-                    // TODO: currently not supported...
+                    // TODO: is this supported?
                 } else {
                     Log.d(TAG, "New edge ${ve.edge.id}")
                     edges.put(ve.edge.id, ve.edge)
@@ -159,8 +187,27 @@ class WebSocketConsumerService : ConsumerService {
         }
     }
 
-    fun processEvent(response: StreamMessage) {
-        val event = mapper.convertValue<InMemoryEvent>(response.payload)
+    fun processEdgeDelete(message: StreamMessage) {
+        val edge = oiaMapper.convertValue<TopologyEdge>(message.payload)
+        Log.i(TAG, "Processing edge delete ${edge.id}")
+
+        consumers.forEach { consumer ->
+            try {
+                if (!edges.containsKey(edge.id)) {
+                    Log.d(TAG, "Edge ${edge.id} does not exist")
+                } else {
+                    Log.i(TAG, "Deleting edge ${edge.id}")
+                    edges.remove(edge.id)
+                    consumer.acceptDeletedEdge(edge.id)
+                }
+            } catch (er : Error) {
+                Log.e(TAG, "Consumer unable to process edge delete ${edge.id} : $er")
+            }
+        }
+    }
+
+    fun processEvent(message: StreamMessage) {
+        val event = oiaMapper.convertValue<InMemoryEvent>(message.payload)
         Log.i(TAG, "Processing event ${event.uei}")
         consumers.forEach {
             try {
@@ -171,37 +218,49 @@ class WebSocketConsumerService : ConsumerService {
         }
     }
 
-    fun processTopology(response: StreamMessage) {
+    fun processTopology(message: StreamMessage) {
         Log.i(TAG, "Processing topology")
-        val topology = mapper.convertValue<Topology>(response.payload)
+        val topology = oiaMapper.convertValue<Topology>(message.payload)
         val graph: Graph<Vertex, Edge> = SparseMultigraph()
 
         edges.clear()
         vertices.clear()
 
-        // Handles node in Topology
-        // Nodes appear directly in Topology and are contained in TopologyEdge - reason being: a
-        // node can "dangle" (e.g. no edges)
-        topology.nodes
+        // Handles node that appear directly in Topology
+        val verticesNodes = topology.nodes
             ?.map { n -> convertNode(n) }
             ?.map { it.id to it }
             ?.toMap()
             ?.toMutableMap()
-            ?.let { nodesDirect -> vertices.putAll(nodesDirect) }
 
         // Handles node, port, and segment in each TopologyEdge
-        // Handles edges
+        val verticesTopologyEdge = mutableMapOf<String, Vertex>()
         topology.edges?.forEach {
             val ve = convertTopologyEdge(it)
             edges.put(ve.edge.id, ve.edge)
-            vertices.put(ve.vertices.src.id, ve.vertices.src)
-            vertices.put(ve.vertices.dst.id, ve.vertices.dst)
+            if (!verticesTopologyEdge.containsKey(ve.vertices.src.id)) {
+                verticesTopologyEdge.put(ve.vertices.src.id, ve.vertices.src)
+            }
+            if (!verticesTopologyEdge.containsKey(ve.vertices.dst.id)) {
+                verticesTopologyEdge.put(ve.vertices.dst.id, ve.vertices.dst)
+            }
         }
 
-        // Add vertices to graph
-        vertices.values.forEach { graph.addVertex(it) }
+        // A Map of all vertices in the topology
+        if (verticesNodes != null) {
+            vertices.putAll(verticesNodes)
+        }
+        vertices.putAll(verticesTopologyEdge)
 
-        // Add edges to graph
+        if (verticesNodes != null) {
+            // Contains all "island" nodes (a node without edges)
+            val diff = Maps.difference(verticesTopologyEdge, verticesNodes).entriesOnlyOnRight()
+
+            // Add "island" nodes (vertices) to the graph
+            diff.forEach { graph.addVertex(it.value) }
+        }
+
+        // Add nodes and edges to graph
         edges.values.forEach { graph.addEdge(it, it.sourceVertex, it.targetVertex) }
 
         Log.i(TAG, "Graph contains ${graph.vertexCount} vertices " +
@@ -219,15 +278,15 @@ class WebSocketConsumerService : ConsumerService {
         }
     }
 
-    fun processNode(response: StreamMessage) {
-        val node = mapper.convertValue<Node>(response.payload)
+    fun processNode(message: StreamMessage) {
+        val node = oiaMapper.convertValue<Node>(message.payload)
         Log.i(TAG, "Processing node ${node.id}")
         val convNode = convertNode(node)
         consumers.forEach {
             try {
                 if (vertices.containsKey(convNode.id)) {
                     Log.d(TAG, "Update to node ${convNode.id}")
-                    // TODO: currently not supported...
+                    // TODO: is this supported?
                 } else {
                     Log.d(TAG, "New vertex ${convNode.id}")
                     vertices.put(convNode.id, convNode)
@@ -282,25 +341,56 @@ class WebSocketConsumerService : ConsumerService {
             }
         })
 
-        val edge = object : Edge {
-            override fun getId(): String {
-                return topologyEdge.id + "-" + topologyEdge.protocol.name
-            }
-
-            override fun getSourceVertex(): Vertex {
-                  return srcVertex
-            }
-
-            override fun getTargetVertex(): Vertex {
-                return dstVertex
-            }
-
-            override fun getProtocol(): String {
-                return topologyEdge.protocol.name
-            }
-        }
+        val edge = EdgeImpl(id = topologyEdge.id + "-" + topologyEdge.protocol.name,
+            src = srcVertex, dst = dstVertex, proto = topologyEdge.protocol.name)
 
         return EdgeVertex(edge, VertexPair(srcVertex, dstVertex))
+    }
+
+    data class EdgeImpl(private val id: String,
+                    private val src: Vertex,
+                    private val dst: Vertex,
+                    private val proto : String) : Edge {
+        override fun getId() = id
+        override fun getSourceVertex() = src
+        override fun getTargetVertex() = dst
+        override fun getProtocol() = proto
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as EdgeImpl
+
+            if (id != other.id) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            return id.hashCode()
+        }
+    }
+
+    data class VertexImpl(private val id: String,
+                      private val label: String,
+                      private val type : Vertex.Type) : Vertex {
+        override fun getId() = id
+        override fun getLabel() = label
+        override fun getType() = type
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (javaClass != other?.javaClass) return false
+
+            other as VertexImpl
+
+            if (id != other.id) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            return id.hashCode()
+        }
     }
 
     data class EdgeVertex(val edge: Edge, val vertices: VertexPair)
@@ -387,53 +477,17 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     fun convertNode(node: Node) : Vertex {
-        return object : Vertex {
-            override fun getId(): String {
-                return node.id.toString()
-            }
-
-            override fun getLabel(): String {
-                return node.label
-            }
-
-            override fun getType(): Vertex.Type {
-                return Vertex.Type.Node
-            }
-        }
+        return VertexImpl(id = node.id.toString(), label = node.label, type = Vertex.Type.Node)
     }
 
     fun convertPort(port: TopologyPort) : Vertex {
-        return object : Vertex {
-            override fun getId(): String {
-                return port.id.toString()
-            }
-
-            override fun getLabel(): String {
-                // TODO: can this be generated?
-                return ""
-            }
-
-            override fun getType(): Vertex.Type {
-                return Vertex.Type.Port
-            }
-        }
+        // TODO: can "label" be generated?
+        return VertexImpl(id = port.id.toString(), label = "", type = Vertex.Type.Port)
     }
 
     fun convertSegment(segment: TopologySegment) : Vertex {
-        return object : Vertex {
-            override fun getId(): String {
-                return segment.id.toString()
-            }
-
-            override fun getLabel(): String {
-                // TODO: can this be generated?
-                return ""
-            }
-
-            override fun getType(): Vertex.Type {
-                return Vertex.Type.Segment
-            }
-        }
+        // TODO: can "label" be generated?
+        return VertexImpl(id = segment.id.toString(), label = "", type = Vertex.Type.Segment)
     }
 
     companion object {
@@ -444,7 +498,10 @@ class WebSocketConsumerService : ConsumerService {
          * The WebSocket server IP and port.
          * Remember to update this accordingly!
          */
-        private val WEB_SOCKET_SERVER = "ws://172.20.50.148:8080"
+//        private val WEB_SOCKET_SERVER = "ws://172.20.50.148:8081"
+
+        // Matt's system...
+        private val WEB_SOCKET_SERVER = "ws://172.20.50.109:8080"
 
         /**
          * The (optional) filter criteria used for subscribing to ARNet streaming service.
