@@ -2,11 +2,16 @@ package org.opennms.arnet.app.mock;
 
 import org.opennms.arnet.api.Consumer;
 import org.opennms.arnet.api.ConsumerService;
+import org.opennms.arnet.api.model.Alarm;
 import org.opennms.arnet.api.model.Edge;
+import org.opennms.arnet.api.model.Situation;
 import org.opennms.arnet.api.model.Vertex;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -22,6 +27,8 @@ import edu.uci.ics.jung.graph.SparseMultigraph;
 public class MockConsumerService implements ConsumerService {
 
     private final Graph<Vertex, Edge> g = new SparseMultigraph<>();
+    private final List<Alarm> alarms;
+    private final List<Situation> situations;
 
     private final AtomicReference<Vertex> lastVertex = new AtomicReference<>();
     private final AtomicInteger nextId = new AtomicInteger(0);
@@ -50,6 +57,12 @@ public class MockConsumerService implements ConsumerService {
         // Setup for generation
         lastVertex.set(v5);
         this.nextId.set(nextId);
+
+        // Create some alarms
+        alarms = Arrays.asList(new MyAlarm("oops1", v1.getId()), new MyAlarm("oops2", v1.getId()));
+
+        // And a situation
+        situations = Arrays.asList(new MySituation("situ1", alarms, v1.getId()));
     }
 
     public void updateGraphOnBackgroundThread() {
@@ -80,7 +93,7 @@ public class MockConsumerService implements ConsumerService {
 
     @Override
     public void accept(Consumer consumer) {
-        consumer.accept(g, Collections.emptyList(), Collections.emptyList());
+        consumer.accept(g, alarms, situations);
         synchronized (consumers) {
             consumers.add(consumer);
         }

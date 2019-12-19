@@ -12,6 +12,7 @@ import com.google.ar.core.Frame
 import com.google.ar.core.TrackingState
 import com.google.ar.sceneform.FrameTime
 import com.google.ar.sceneform.SceneView
+import com.google.ar.sceneform.math.Vector3
 import com.google.ar.sceneform.ux.ArFragment
 import org.opennms.arnet.WebSocketConsumerService
 import org.opennms.arnet.app.mock.MockConsumerService
@@ -107,6 +108,7 @@ class MainActivity : AppCompatActivity() {
                         // Create the network
                         val node = NetworkNode(sceneView.scene, renderables, consumerService)
                         node.setImage(augmentedImage)
+                        node.worldScale = Vector3(0.1f, 0.1f, 0.1f)
                         augmentedImageMap[augmentedImage] = node
                         arFragment.arSceneView.scene.addChild(node)
                         // For additional hooks

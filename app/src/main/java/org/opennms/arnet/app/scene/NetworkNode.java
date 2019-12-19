@@ -7,9 +7,7 @@ import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.FrameTime;
 import com.google.ar.sceneform.Scene;
 import com.google.ar.sceneform.math.Vector3;
-import com.google.ar.sceneform.utilities.AndroidPreconditions;
 
-import org.jetbrains.annotations.Nullable;
 import org.opennms.arnet.api.ConsumerService;
 import org.opennms.arnet.app.domain.InventoryEdge;
 import org.opennms.arnet.app.domain.InventoryVertex;
@@ -18,7 +16,6 @@ import org.opennms.arnet.app.domain.NetworkManager;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, NetworkListenerDelegate.Visitor {
     private static final String TAG = "NetworkNode";
@@ -82,7 +79,6 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
         mapNode = new MapNode();
         mapNode.setParent(this);
         mapNode.setRenderable(renderables.getMap());
-        mapNode.setWorldScale(new Vector3(3f, 3f, 3f));
         mapNode.setLocalPosition(new Vector3(0.0f, 0.0f, 0.0f));
     }
 
