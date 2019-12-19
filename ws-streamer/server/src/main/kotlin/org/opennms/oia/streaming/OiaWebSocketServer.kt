@@ -33,7 +33,7 @@ class OiaWebSocketServer(
 
     private val mapper = jacksonObjectMapper()
     private val subscribers = ConcurrentHashMap<WebSocket, FilterCriteria>()
-    private val nodeIdsBySession = ConcurrentHashMap<WebSocket, MutableSet<Int>?>()
+    private val nodeIdsBySession = ConcurrentHashMap<WebSocket, MutableSet<Int>>()
 
     private val nodeCache = ConcurrentHashMap<Int, Node>()
     private val alarmCache = ConcurrentHashMap<Int, Alarm>()
