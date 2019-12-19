@@ -3,7 +3,7 @@
     <cm:property-placeholder id="streamingProperties" persistent-id="org.opennms.oia.streaming.properties"
                              update-strategy="reload">
         <cm:default-properties>
-            <cm:property name="wsPort" value="8083" />
+            <cm:property name="wsPort" value="8080" />
         </cm:default-properties>
     </cm:property-placeholder>
 

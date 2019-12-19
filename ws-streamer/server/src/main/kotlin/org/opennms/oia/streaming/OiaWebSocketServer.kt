@@ -29,12 +29,15 @@ class OiaWebSocketServer(
     private val eventSubscriptionService: EventSubscriptionService
 ) : WebSocketServer(InetSocketAddress(port)), AlarmLifecycleListener, TopologyEdgeConsumer, EventListener {
 
-    private val mapper = jacksonObjectMapper()
     private val log = LoggerFactory.getLogger(OiaWebSocketServer::class.java)
-    private val subscribers = ConcurrentHashMap<WebSocket, FilterCriteria?>()
-    private val nodeIdsBySession = ConcurrentHashMap<WebSocket, MutableSet<Int>?>()
+
+    private val mapper = jacksonObjectMapper()
+    private val subscribers = ConcurrentHashMap<WebSocket, FilterCriteria>()
+    private val nodeIdsBySession = ConcurrentHashMap<WebSocket, MutableSet<Int>>()
+
     private val nodeCache = ConcurrentHashMap<Int, Node>()
     private val alarmCache = ConcurrentHashMap<Int, Alarm>()
+
     private val alarmLock = ReentrantLock()
     private val nodeLock = ReentrantLock()
 
@@ -48,7 +51,7 @@ class OiaWebSocketServer(
         stop()
     }
 
-    private fun subscribeConnection(conn: WebSocket, filterCriteria: FilterCriteria?) {
+    private fun subscribeConnection(conn: WebSocket, filterCriteria: FilterCriteria) {
         require(subscribers[conn] == null)
         log.info("Received subscribe request from connection '$conn' with criteria '$filterCriteria'")
         subscribers[conn] = filterCriteria
@@ -63,7 +66,7 @@ class OiaWebSocketServer(
         subscribers.remove(conn)
     }
 
-    private fun generateTopology(filterCriteria: FilterCriteria?): ByteArray {
+    private fun generateTopology(filterCriteria: FilterCriteria): ByteArray {
         val alarms = alarmDao.alarms
             .filter { filterAlarm(it, filterCriteria) }
             .let { if (it.isNotEmpty()) it.toSet() else null }
@@ -73,6 +76,7 @@ class OiaWebSocketServer(
         val edges = edgeDao.edges
             .filter { filterEdge(it, filterCriteria) }
             .let { if (it.isNotEmpty()) it.toSet() else null }
+
         return mapper.writeValueAsBytes(topologyMessage(Topology(alarms = alarms, nodes = nodes, edges = edges)))
     }
 
@@ -88,7 +92,8 @@ class OiaWebSocketServer(
             return@filter nodeIdsBySession[it]?.let { nodes ->
                 !nodes.contains(node.id)
             } ?: true
-        }?.toSet()
+        }
+            ?.toSet()
 
         log.trace("Receivers for node '$node' are '$receivers'")
 
@@ -111,14 +116,12 @@ class OiaWebSocketServer(
         edge.visitEndpoints(edgeVisitor)
         nodeCallback?.invoke(sourceNode, targetNode)
 
-        val receivers = if (sourceNode != null && targetNode != null) {
+        val receivers = if (sourceNode == null || targetNode == null) null else {
             subscribers
                 .filter { filterEdge(edge, it.value) }
                 .map { it.key }
                 .let { if (it.isNotEmpty()) it else null }
                 ?.toSet()
-        } else {
-            null
         }
 
         log.trace("Receivers for edge '$edge' are '$receivers'")
@@ -127,7 +130,7 @@ class OiaWebSocketServer(
     }
 
     private fun generateReceivers(location: String): Set<WebSocket>? {
-        val receivers = subscribers.filter { it.value == null || it.value!!.locations?.contains(location) ?: true }
+        val receivers = subscribers.filter { it.value.locations?.contains(location) ?: true }
             .map { it.key }
             .toSet()
 
@@ -136,35 +139,42 @@ class OiaWebSocketServer(
 
     private fun handleNode(node: Node) {
         nodeLock.withLock {
-            val receivers = generateNodeReceivers(node)
-
-            receivers?.let {
+            generateNodeReceivers(node)?.let { receivers ->
                 nodeCache[node.id] = node
                 broadcast(mapper.writeValueAsBytes(nodeMessage(node)), receivers)
 
                 // Record that these receivers have seen this node
-                receivers?.forEach {
+                receivers.forEach {
                     nodeIdsBySession.compute(it) { _, nodeIds -> (nodeIds ?: mutableSetOf()).apply { add(node.id) } }
                 }
             }
         }
     }
 
-    override fun onOpen(conn: WebSocket, handshake: ClientHandshake) {
+    override fun onOpen(conn: WebSocket?, handshake: ClientHandshake?) {
+        requireNotNull(conn)
+        requireNotNull(handshake)
+
         log.info("Received websocket open on connection '$conn'")
     }
 
-    override fun onClose(conn: WebSocket, code: Int, reason: String, remote: Boolean) {
+    override fun onClose(conn: WebSocket?, code: Int, reason: String?, remote: Boolean) {
+        requireNotNull(conn)
+        requireNotNull(reason)
+
         log.info("Received websocket close on connection '$conn'")
         unsubscribeConnection(conn)
     }
 
-    override fun onMessage(conn: WebSocket, message: String) {
+    override fun onMessage(conn: WebSocket?, message: String?) {
+        requireNotNull(conn)
+        requireNotNull(message)
+
         log.info("Received websocket message '$message' on connection '$conn'")
         val request = mapper.readValue<StreamRequest>(message)
 
         when (request.action) {
-            RequestAction.SUBSCRIBE -> subscribeConnection(conn, request.criteria)
+            RequestAction.SUBSCRIBE -> subscribeConnection(conn, request.criteria ?: FilterCriteria())
             RequestAction.UNSUBSCRIBE -> unsubscribeConnection(conn)
         }
     }
@@ -177,7 +187,9 @@ class OiaWebSocketServer(
         log.warn("Error starting websocket server", ex)
     }
 
-    override fun handleDeletedAlarm(alarmId: Int, reductionKey: String) {
+    override fun handleDeletedAlarm(alarmId: Int, reductionKey: String?) {
+        requireNotNull(reductionKey)
+
         log.trace("Received deleted alarm with reduction key '$reductionKey'")
 
         if (subscribers.isEmpty()) {
@@ -197,15 +209,24 @@ class OiaWebSocketServer(
         }
     }
 
-    // TODO
-    override fun handleAlarmSnapshot(alarms: MutableList<Alarm>) {
+    override fun handleAlarmSnapshot(alarms: MutableList<Alarm>?) {
+        requireNotNull(alarms)
+
         alarmLock.withLock {
+            val existingAlarms = alarmCache.values.toSet()
+            val snapshotAlarms = alarms.toSet()
+
+            (snapshotAlarms - existingAlarms).forEach { handleNewOrUpdatedAlarm(it) }
+            (existingAlarms - snapshotAlarms).forEach { handleDeletedAlarm(it.id, it.reductionKey) }
+
             alarmCache.clear()
             alarmCache.putAll(alarms.map { it.id to it })
         }
     }
 
-    override fun handleNewOrUpdatedAlarm(alarm: Alarm) {
+    override fun handleNewOrUpdatedAlarm(alarm: Alarm?) {
+        requireNotNull(alarm)
+
         log.trace("Received new or updated alarm '$alarm'")
 
         if (subscribers.isEmpty()) {
@@ -224,7 +245,9 @@ class OiaWebSocketServer(
         }
     }
 
-    override fun onEdgeDeleted(topologyEdge: TopologyEdge) {
+    override fun onEdgeDeleted(topologyEdge: TopologyEdge?) {
+        requireNotNull(topologyEdge)
+
         log.trace("Received deleted edge '$topologyEdge'")
 
         if (subscribers.isEmpty()) {
@@ -232,9 +255,7 @@ class OiaWebSocketServer(
             return
         }
 
-        val receivers = generateEdgeReceivers(topologyEdge, null)
-
-        receivers?.let {
+        generateEdgeReceivers(topologyEdge, null)?.let { receivers ->
             log.debug("Broadcasting edge delete '$topologyEdge' to receivers '$receivers'")
             broadcast(mapper.writeValueAsBytes(edgeDeleteMessage(topologyEdge)), receivers)
         }
@@ -242,7 +263,9 @@ class OiaWebSocketServer(
 
     override fun getProtocols(): MutableSet<TopologyProtocol> = Collections.singleton(TopologyProtocol.ALL)
 
-    override fun onEdgeAddedOrUpdated(topologyEdge: TopologyEdge) {
+    override fun onEdgeAddedOrUpdated(topologyEdge: TopologyEdge?) {
+        requireNotNull(topologyEdge)
+
         log.trace("Received new or updated edge '$topologyEdge'")
 
         if (subscribers.isEmpty()) {
@@ -250,28 +273,30 @@ class OiaWebSocketServer(
             return
         }
 
-        val receivers = generateEdgeReceivers(topologyEdge) { sourceNode, targetNode ->
+        generateEdgeReceivers(topologyEdge) { sourceNode, targetNode ->
             sourceNode?.let { handleNode(it) }
             targetNode?.let { handleNode(it) }
         }
-
-        receivers?.let {
-            log.debug("Broadcasting edge '$topologyEdge' to receivers '$receivers'")
-            broadcast(mapper.writeValueAsBytes(edgeMessage(topologyEdge)), receivers)
-        }
+            ?.let { receivers ->
+                log.debug("Broadcasting edge '$topologyEdge' to receivers '$receivers'")
+                broadcast(mapper.writeValueAsBytes(edgeMessage(topologyEdge)), receivers)
+            }
     }
 
     override fun getName() = "OiaWebSocketServer"
 
     override fun getNumThreads() = 1
 
-    override fun onEvent(event: InMemoryEvent) {
+    override fun onEvent(event: InMemoryEvent?) {
         log.trace("Received new event '$event'")
 
-        nodeCache[event.nodeId]?.let { eventNode ->
-            val receivers = generateNodeReceivers(eventNode)
+        if (event?.nodeId == null) {
+            log.trace("Ignoring event that doesn't match a node")
+            return
+        }
 
-            receivers?.let {
+        nodeCache[event.nodeId]?.let { eventNode ->
+            generateNodeReceivers(eventNode)?.let { receivers ->
                 log.debug("Broadcasting event '$event' to receivers '$receivers'")
                 broadcast(mapper.writeValueAsBytes(eventMessage(event)), receivers)
             }
