@@ -143,8 +143,11 @@ public class NetworkManager implements Consumer {
                 didAddOrRemoveAlarm = true;
             }
         }
-    }
 
+        if (didAddOrRemoveAlarm) {
+            recalculateLayout();
+        }
+    }
 
     private void updateSituations(Collection<Situation> situations) {
         boolean didAddOrRemoveSituation = false;
@@ -169,6 +172,10 @@ public class NetworkManager implements Consumer {
                 listener.onSituationRemoved(is);
                 didAddOrRemoveSituation = true;
             }
+        }
+
+        if (didAddOrRemoveSituation) {
+            recalculateLayout();
         }
     }
 
@@ -265,7 +272,7 @@ public class NetworkManager implements Consumer {
     }
 
     private void recalculateLayout() {
-        layoutStrategy.apply(inventoryGraph);
+        layoutStrategy.apply(inventoryGraph, alarmsByReductionKey.values(), situationsByReductionKey.values());
         listener.onLayoutRecalculated();
     }
 

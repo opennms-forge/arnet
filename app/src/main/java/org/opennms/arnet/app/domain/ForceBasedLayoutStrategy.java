@@ -4,9 +4,12 @@ import org.opennms.arnet.api.model.Vertex;
 
 import java.awt.Dimension;
 import java.awt.geom.Point2D;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
@@ -18,7 +21,7 @@ import edu.uci.ics.jung.graph.util.Pair;
 public class ForceBasedLayoutStrategy implements LayoutStrategy  {
 
     @Override
-    public void apply(Graph<InventoryVertex, ?> g) {
+    public void apply(Graph<InventoryVertex, InventoryEdge> g, Collection<InventoryAlarm> alarms, Collection<InventorySituation> situations) {
         Dimension size = new Dimension(1,1);
         D3TopoLayout<InventoryVertex, ?> layout = new D3TopoLayout<>(g, size);
         layout.initialize();
@@ -60,6 +63,15 @@ public class ForceBasedLayoutStrategy implements LayoutStrategy  {
             Point2D pos = layout.getPosition(v);
             v.setX(((float)(pos.getX() + offset.getX()) * scale));
             v.setY(((float)(pos.getY() + offset.getY()) * scale));
+        }
+
+        // No support for alarms or situations here - set them all to 0
+        final List<XY> xys = new ArrayList<>();
+        xys.addAll(alarms);
+        xys.addAll(situations);
+        for (XY xy : xys) {
+            xy.setX(0);
+            xy.setY(0);
         }
     }
 

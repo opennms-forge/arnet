@@ -1,5 +1,6 @@
 package org.opennms.arnet.app.scene;
 
+import org.opennms.arnet.app.domain.InventoryAlarm;
 import org.opennms.arnet.app.domain.InventoryEdge;
 import org.opennms.arnet.app.domain.InventoryVertex;
 import org.opennms.arnet.app.domain.NetworkListener;
@@ -93,6 +94,42 @@ public class NetworkListenerDelegate implements NetworkListener {
         }
     }
 
+    public static class AlarmAddedOrUpdated implements Task {
+        private final InventoryAlarm a;
+
+        private AlarmAddedOrUpdated(InventoryAlarm a) {
+            this.a = Objects.requireNonNull(a);
+        }
+
+        @Override
+        public int getPriority() {
+            return 0;
+        }
+
+        @Override
+        public void visit(Visitor visitor) {
+            visitor.onAlarmAddedOrUpdated(a);
+        }
+    }
+
+    public static class AlarmRemoved implements Task {
+        private final InventoryAlarm a;
+
+        private AlarmRemoved(InventoryAlarm a) {
+            this.a = Objects.requireNonNull(a);
+        }
+
+        @Override
+        public int getPriority() {
+            return 0;
+        }
+
+        @Override
+        public void visit(Visitor visitor) {
+            visitor.onAlarmRemoved(a);
+        }
+    }
+
     public static class LayoutRecalculated implements Task {
 
         private LayoutRecalculated() { }
@@ -118,6 +155,10 @@ public class NetworkListenerDelegate implements NetworkListener {
 
         void onEdgeRemoved(InventoryEdge e);
 
+        void onAlarmAddedOrUpdated(InventoryAlarm a);
+
+        void onAlarmRemoved(InventoryAlarm a);
+
         void onLayoutRecalculated();
 
     }
@@ -140,6 +181,16 @@ public class NetworkListenerDelegate implements NetworkListener {
     @Override
     public void onEdgeRemoved(InventoryEdge e) {
         tasks.add(new EdgeRemoved(e));
+    }
+
+    @Override
+    public void onAlarmAddedOrUpdated(InventoryAlarm a) {
+        tasks.add(new AlarmAddedOrUpdated(a));
+    }
+
+    @Override
+    public void onAlarmRemoved(InventoryAlarm a) {
+        tasks.add(new AlarmRemoved(a));
     }
 
     @Override

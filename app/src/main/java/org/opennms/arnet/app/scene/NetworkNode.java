@@ -9,6 +9,7 @@ import com.google.ar.sceneform.Scene;
 import com.google.ar.sceneform.math.Vector3;
 
 import org.opennms.arnet.api.ConsumerService;
+import org.opennms.arnet.app.domain.InventoryAlarm;
 import org.opennms.arnet.app.domain.InventoryEdge;
 import org.opennms.arnet.app.domain.InventoryVertex;
 import org.opennms.arnet.app.domain.NetworkManager;
@@ -31,6 +32,7 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
 
     private final Map<String, InventoryNode> inventoryNodesById = new LinkedHashMap<>();
     private final Map<String, ConnectorNode> connectorNodesById = new LinkedHashMap<>();
+    private final Map<String, AlarmNode> alarmNodesById = new LinkedHashMap<>();
     private MapNode mapNode;
 
     public NetworkNode(Scene scene, RenderableRegistry renderables, ConsumerService consumerService) {
@@ -87,7 +89,7 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
         inventoryNodesById.computeIfAbsent(v.getId(), id -> {
             InventoryNode node = new InventoryNode(v);
             node.setParent(this);
-            node.setRenderable(renderables.getRedBall());
+            node.setRenderable(renderables.getBlueBall());
             return node;
         });
     }
@@ -117,6 +119,25 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
     @Override
     public void onEdgeRemoved(InventoryEdge e) {
         ConnectorNode node = connectorNodesById.remove(e.getId());
+        if (node == null) {
+            return;
+        }
+        removeChild(node);
+    }
+
+    @Override
+    public void onAlarmAddedOrUpdated(InventoryAlarm a) {
+        alarmNodesById.computeIfAbsent(a.getReductionKey(), id -> {
+            AlarmNode node = new AlarmNode(a);
+            node.setParent(this);
+            node.setRenderable(renderables.getRedBall());
+            return node;
+        });
+    }
+
+    @Override
+    public void onAlarmRemoved(InventoryAlarm a) {
+        AlarmNode node = alarmNodesById.remove(a.getReductionKey());
         if (node == null) {
             return;
         }

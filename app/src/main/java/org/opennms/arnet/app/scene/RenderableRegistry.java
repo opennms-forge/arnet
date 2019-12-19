@@ -20,12 +20,15 @@ import java.util.concurrent.CompletableFuture;
 public class RenderableRegistry {
 
     private final CompletableFuture<ModelRenderable> redBall;
+    private final CompletableFuture<ModelRenderable> blueBall;
     private final CompletableFuture<ModelRenderable> cube;
     private final CompletableFuture<ModelRenderable> map;
     private final CompletableFuture<Void> renderableFuture;
 
     public RenderableRegistry(Context context) {
         redBall = MaterialFactory.makeOpaqueWithColor(context, new Color(android.graphics.Color.RED))
+                .thenApply(material -> ShapeFactory.makeCube(new Vector3(0.1f, 0.1f, 0.1f), new Vector3(0.0f, 0.0f, 0.0f), material));
+        blueBall = MaterialFactory.makeOpaqueWithColor(context, new Color(android.graphics.Color.BLUE))
                 .thenApply(material -> ShapeFactory.makeCube(new Vector3(0.1f, 0.1f, 0.1f), new Vector3(0.0f, 0.0f, 0.0f), material));
         cube = MaterialFactory.makeOpaqueWithColor(context, new Color(android.graphics.Color.WHITE))
                 .thenApply(
@@ -39,6 +42,10 @@ public class RenderableRegistry {
 
     public ModelRenderable getRedBall() {
         return redBall.getNow(null);
+    }
+
+    public ModelRenderable getBlueBall() {
+        return blueBall.getNow(null);
     }
 
     public ModelRenderable getCube() {
