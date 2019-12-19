@@ -12,7 +12,9 @@ import org.opennms.arnet.api.model.Event;
 import org.opennms.arnet.api.model.Situation;
 import org.opennms.arnet.api.model.Vertex;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -27,6 +29,9 @@ public class NetworkManager implements Consumer {
 
     private static final String TAG = "NetworkManager";
 
+    private final Map<String, InventoryAlarm> alarmsByReductionKey = new HashMap<>();
+    private final Map<String, InventorySituation> situationsByReductionKey = new HashMap<>();
+
     private final Graph<InventoryVertex, InventoryEdge> inventoryGraph = new SparseMultigraph<>();
     private final Map<String, InventoryVertex> inventoryVerticesById = new LinkedHashMap<>();
     private final Map<String, InventoryEdge> inventoryEdgesById = new LinkedHashMap<>();
@@ -38,7 +43,148 @@ public class NetworkManager implements Consumer {
         this.listener = Objects.requireNonNull(listener);
     }
 
-    private void merge(Graph<Vertex, Edge> graph) {
+    @Override
+    public void accept(Graph<Vertex, Edge> graph, Collection<Alarm> alarms, Collection<Situation> situations) {
+        updateGraph(graph);
+        updateAlarms(alarms);
+        updateSituations(situations);
+    }
+
+    @Override
+    public void acceptVertex(Vertex v) {
+        synchronized (inventoryGraph) {
+            addVertex(v);
+            recalculateLayout();
+        }
+    }
+
+    @Override
+    public void acceptDeletedVertex(String vertexId) {
+        synchronized (inventoryGraph) {
+            final InventoryVertex iv = inventoryVerticesById.remove(vertexId);
+            inventoryGraph.removeVertex(iv);
+            listener.onVertexRemoved(iv);
+            recalculateLayout();
+        }
+    }
+
+    @Override
+    public void acceptEdge(Edge e) {
+        synchronized (inventoryGraph) {
+            addEdge(e);
+        }
+    }
+
+    @Override
+    public void acceptDeletedEdge(String edgeId) {
+        synchronized (inventoryGraph) {
+            final InventoryEdge ie = inventoryEdgesById.remove(edgeId);
+            inventoryGraph.removeEdge(ie);
+            listener.onEdgeRemoved(ie);
+        }
+    }
+
+    @Override
+    public void acceptAlarm(Alarm a) {
+        synchronized (alarmsByReductionKey) {
+            addAlarm(a);
+        }
+    }
+
+    @Override
+    public void acceptDeletedAlarm(String reductionKey) {
+        synchronized (alarmsByReductionKey) {
+            final InventoryAlarm ia = alarmsByReductionKey.remove(reductionKey);
+            listener.onAlarmRemoved(ia);
+        }
+    }
+
+    @Override
+    public void acceptSituation(Situation s) {
+        synchronized (situationsByReductionKey) {
+            addSituation(s);
+        }
+    }
+
+    @Override
+    public void acceptDeleteSituation(String reductionKey) {
+        synchronized (situationsByReductionKey) {
+            final InventorySituation is = situationsByReductionKey.remove(reductionKey);
+            listener.onSituationRemoved(is);
+        }
+    }
+
+    @Override
+    public void acceptEvent(Event e) {
+        listener.onEvent(new InventoryEvent(e));
+    }
+
+    private void updateAlarms(Collection<Alarm> alarms) {
+        boolean didAddOrRemoveAlarm = false;
+
+        synchronized (alarmsByReductionKey) {
+            final Set<String> alarmReductionKeys = new HashSet<>();
+            for (Alarm alarm : alarms) {
+                alarmReductionKeys.add(alarm.getReductionKey());
+                if (alarmsByReductionKey.containsKey(alarm.getReductionKey())) {
+                    // We already know about this alarm, nothing to do
+                    continue;
+                }
+
+                // Add it
+                addAlarm(alarm);
+                didAddOrRemoveAlarm = true;
+            }
+
+            // We've added all of the alarms that need to be added, let's see if any need to be removed
+            for (String reductionKeyToRemove : Sets.difference(alarmsByReductionKey.keySet(), alarmReductionKeys)) {
+                final InventoryAlarm ia = alarmsByReductionKey.remove(reductionKeyToRemove);
+                listener.onAlarmRemoved(ia);
+                didAddOrRemoveAlarm = true;
+            }
+        }
+    }
+
+
+    private void updateSituations(Collection<Situation> situations) {
+        boolean didAddOrRemoveSituation = false;
+
+        synchronized (situationsByReductionKey) {
+            final Set<String> situationReductionKeys = new HashSet<>();
+            for (Situation situation : situations) {
+                situationReductionKeys.add(situation.getReductionKey());
+                if (situationsByReductionKey.containsKey(situation.getReductionKey())) {
+                    // We already know about this situation, nothing to do
+                    continue;
+                }
+
+                // Add it
+                addSituation(situation);
+                didAddOrRemoveSituation = true;
+            }
+
+            // We've added all of the situations that need to be added, let's see if any need to be removed
+            for (String reductionKeyToRemove : Sets.difference(situationsByReductionKey.keySet(), situationReductionKeys)) {
+                final InventorySituation is = situationsByReductionKey.remove(reductionKeyToRemove);
+                listener.onSituationRemoved(is);
+                didAddOrRemoveSituation = true;
+            }
+        }
+    }
+
+    private void addAlarm(Alarm alarm) {
+        final InventoryAlarm ia = new InventoryAlarm(alarm);
+        alarmsByReductionKey.put(ia.getReductionKey(), ia);
+        listener.onAlarmAddedOrUpdated(ia);
+    }
+
+    private void addSituation(Situation situation) {
+        final InventorySituation is = new InventorySituation(situation);
+        situationsByReductionKey.put(is.getReductionKey(), is);
+        listener.onSituationAddedOrUpdated(is);
+    }
+
+    private void updateGraph(Graph<Vertex, Edge> graph) {
         boolean didAddOrRemoveVertex = false;
         boolean didAddOrRemoveEdge = false;
 
@@ -60,6 +206,7 @@ public class NetworkManager implements Consumer {
             for (String vertexIdToRemove : Sets.difference(inventoryVerticesById.keySet(), graphVertexIds)) {
                 final InventoryVertex iv = inventoryVerticesById.remove(vertexIdToRemove);
                 inventoryGraph.removeVertex(iv);
+                listener.onVertexRemoved(iv);
                 didAddOrRemoveVertex = true;
             }
 
@@ -80,6 +227,7 @@ public class NetworkManager implements Consumer {
             for (String edgeIdToRemove : Sets.difference(inventoryEdgesById.keySet(), graphEdgeIds)) {
                 final InventoryEdge ie = inventoryEdgesById.remove(edgeIdToRemove);
                 inventoryGraph.removeEdge(ie);
+                listener.onEdgeRemoved(ie);
                 didAddOrRemoveEdge = true;
             }
 
@@ -121,70 +269,6 @@ public class NetworkManager implements Consumer {
         listener.onLayoutRecalculated();
     }
 
-    @Override
-    public void accept(Graph<Vertex, Edge> graph, Collection<Alarm> alarms, Collection<Situation> situations) {
-        merge(graph);
-    }
-
-    @Override
-    public void acceptVertex(Vertex v) {
-        synchronized (inventoryGraph) {
-            addVertex(v);
-            recalculateLayout();
-        }
-    }
-
-    @Override
-    public void acceptDeletedVertex(String vertexId) {
-        synchronized (inventoryGraph) {
-            final InventoryVertex iv = inventoryVerticesById.remove(vertexId);
-            inventoryGraph.removeVertex(iv);
-            listener.onVertexRemoved(iv);
-            recalculateLayout();
-        }
-    }
-
-    @Override
-    public void acceptEdge(Edge e) {
-        synchronized (inventoryGraph) {
-            addEdge(e);
-        }
-    }
-
-    @Override
-    public void acceptDeletedEdge(String edgeId) {
-        synchronized (inventoryGraph) {
-            final InventoryEdge ie = inventoryEdgesById.remove(edgeId);
-            inventoryGraph.removeEdge(ie);
-            listener.onEdgeRemoved(ie);
-        }
-    }
-
-    @Override
-    public void acceptAlarm(Alarm a) {
-
-    }
-
-    @Override
-    public void acceptDeletedAlarm(String reductionKey) {
-
-    }
-
-    @Override
-    public void acceptSituation(Situation s) {
-
-    }
-
-    @Override
-    public void acceptDeleteSituation(String reductionKey) {
-
-    }
-
-    @Override
-    public void acceptEvent(Event e) {
-
-    }
-
     public List<InventoryVertex> getInventoryVertices() {
         return Lists.newArrayList(inventoryVerticesById.values());
     }
@@ -197,4 +281,11 @@ public class NetworkManager implements Consumer {
         this.layoutStrategy = Objects.requireNonNull(layoutStrategy);
     }
 
+    public List<InventoryAlarm> getAlarms() {
+        return new ArrayList<>(alarmsByReductionKey.values());
+    }
+
+    public List<InventorySituation> getSituations() {
+        return new ArrayList<>(situationsByReductionKey.values());
+    }
 }

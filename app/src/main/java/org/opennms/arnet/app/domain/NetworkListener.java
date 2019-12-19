@@ -22,4 +22,23 @@ public interface NetworkListener {
 
     }
 
+    default void onAlarmAddedOrUpdated(InventoryAlarm ia) {
+
+    }
+
+    default void onAlarmRemoved(InventoryAlarm ia) {
+
+    }
+
+    default void onSituationAddedOrUpdated(InventorySituation is) {
+
+    }
+
+    default void onSituationRemoved(InventorySituation is) {
+
+    }
+
+    default void onEvent(InventoryEvent ie) {
+
+    }
 }
