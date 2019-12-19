@@ -1,6 +1,12 @@
 # ARNet
 
-Augmented reality meets OpenNMS
+ARNet is an 3D network visualization tool that integrates with OpenNMS.
+
+## Prerequisites
+1. Android Studio
+2. An ARCore [supported device](//developers.google.com/ar/discover/supported-devices)
+
+## Project Structure
 
 ARNet is composed of three projects:
 1. Model
@@ -29,3 +35,6 @@ Use Android Studio to build and launch
 
 Note: update constant 'WEB_SOCKET_SERVER' in class 'WebSocketConsumerService' to reflect the
 IP and port of the backend.
+
+
+
