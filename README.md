@@ -1,4 +1,4 @@
-# ARNet
+# ARNet [![CircleCI](https://circleci.com/gh/opennms-forge/arnet.svg?style=svg)](https://circleci.com/gh/opennms-forge/arnet)
 
 ARNet is an 3D network visualization tool that integrates with OpenNMS.
 
