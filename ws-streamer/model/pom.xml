@@ -26,6 +26,10 @@
                         <Bundle-RequiredExecutionEnvironment>JavaSE-1.8</Bundle-RequiredExecutionEnvironment>
                         <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
                         <Bundle-Version>${project.version}</Bundle-Version>
+                        <Include-Resource>
+                            /=src/main/resources/,
+                            META-INF=target/classes/META-INF
+                        </Include-Resource>
                     </instructions>
                 </configuration>
             </plugin>
