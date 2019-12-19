@@ -26,8 +26,9 @@
                         <Bundle-RequiredExecutionEnvironment>JavaSE-1.8</Bundle-RequiredExecutionEnvironment>
                         <Bundle-SymbolicName>${project.artifactId}</Bundle-SymbolicName>
                         <Bundle-Version>${project.version}</Bundle-Version>
+                        <!-- Explicit include needed for kotlin_module -->
                         <Include-Resource>
-                            /=-src/main/resources/,
+                            {maven-resources},
                             META-INF=target/classes/META-INF
                         </Include-Resource>
                     </instructions>
