@@ -25,7 +25,6 @@ public class InventoryNode extends Node {
     private Vector3 targetPosition;
     private Vector3 lastTargetPosition;
 
-
     public InventoryNode(InventoryVertex v) {
         this.v = Objects.requireNonNull(v);
         // When adding a new node, go directly to where it's expected to be
@@ -35,7 +34,8 @@ public class InventoryNode extends Node {
     }
 
     public void inheritPositionFromLayout() {
-        targetPosition = new Vector3((v.getX() / 2) - 0.25f, 0.1f, (v.getY() / 2) - 0.25f);
+        // (v.getX() / 2) - 0.25f
+        targetPosition = new Vector3(v.getX(), 0.1f, v.getY());
     }
 
     @Override

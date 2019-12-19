@@ -1,6 +1,7 @@
 package org.opennms.arnet.app.scene;
 
 import android.content.Context;
+import android.net.Uri;
 import android.util.Log;
 
 import com.google.ar.sceneform.math.Vector3;
@@ -20,6 +21,7 @@ public class RenderableRegistry {
 
     private final CompletableFuture<ModelRenderable> redBall;
     private final CompletableFuture<ModelRenderable> cube;
+    private final CompletableFuture<ModelRenderable> map;
     private final CompletableFuture<Void> renderableFuture;
 
     public RenderableRegistry(Context context) {
@@ -29,7 +31,10 @@ public class RenderableRegistry {
                 .thenApply(
                         material -> ShapeFactory.makeCube(new Vector3(.01f, .01f, .01f),
                                 Vector3.zero(), material));
-        renderableFuture = CompletableFuture.allOf(redBall, cube);
+        map = ModelRenderable.builder()
+                .setSource(context, Uri.parse("map.sfb"))
+                .build();
+        renderableFuture = CompletableFuture.allOf(redBall, cube, map);
     }
 
     public ModelRenderable getRedBall() {
@@ -38,6 +43,10 @@ public class RenderableRegistry {
 
     public ModelRenderable getCube() {
         return cube.getNow(null);
+    }
+
+    public ModelRenderable getMap() {
+        return map.getNow(null);
     }
 
     public CompletableFuture<Void> getFuture() {

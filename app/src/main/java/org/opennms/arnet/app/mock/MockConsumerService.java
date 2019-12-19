@@ -29,19 +29,27 @@ public class MockConsumerService implements ConsumerService {
     private final Set<Consumer> consumers = new LinkedHashSet<>();
 
     public MockConsumerService() {
+        int nextId = 1;
+        // TODO: Express this as nicer builder-style pattern
         // Create some fixed graph to start
-        Vertex v1 = MyVertex.forId(1);
+        Vertex v1 = MyVertex.forId(nextId++);
         g.addVertex(v1);
-        Vertex v2 = MyVertex.forId(2);
+        Vertex v2 = MyVertex.forId(nextId++);
         g.addVertex(v2);
-        Vertex v3 = MyVertex.forId(3);
+        Vertex v3 = MyVertex.forId(nextId++);
         g.addVertex(v3);
+        Vertex v4 = MyVertex.forId(nextId++);
+        g.addVertex(v4);
+        Vertex v5 = MyVertex.forId(nextId++);
+        g.addVertex(v5);
         g.addEdge(MyEdge.forId("Edge-1-2", v1, v2), v1, v2);
+        g.addEdge(MyEdge.forId("Edge-1-4", v1, v4), v1, v4);
+        g.addEdge(MyEdge.forId("Edge-1-5", v1, v5), v1, v5);
         g.addEdge(MyEdge.forId("Edge-2-3", v2, v3), v2, v3);
 
         // Setup for generation
-        lastVertex.set(v3);
-        nextId.set(4);
+        lastVertex.set(v5);
+        this.nextId.set(nextId);
     }
 
     public void updateGraphOnBackgroundThread() {

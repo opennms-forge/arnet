@@ -1,11 +1,16 @@
 package org.opennms.arnet.app.domain;
 
+import org.opennms.arnet.api.model.Vertex;
+
 import java.awt.Dimension;
 import java.awt.geom.Point2D;
+import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
+import java.util.Set;
 
 import edu.uci.ics.jung.graph.Graph;
 import edu.uci.ics.jung.graph.util.Pair;
@@ -20,11 +25,41 @@ public class ForceBasedLayoutStrategy implements LayoutStrategy  {
         while(!layout.done()) {
             layout.step();
         }
+
+        float scale = 1/100f;
+        Point2D offset = new Point2D.Float(0.0f, 0.0f);
+
+        // Determine which vertices have the most links
+        Set<InventoryVertex> verticesWithMostNeighbors = new HashSet<>();
+        int maxNumNeighbors = -1;
+        for (InventoryVertex v : g.getVertices()) {
+            int numNeighbors = g.getNeighborCount(v);
+            if (numNeighbors > maxNumNeighbors) {
+                maxNumNeighbors = numNeighbors;
+                verticesWithMostNeighbors.clear();
+                verticesWithMostNeighbors.add(v);
+            } else if (numNeighbors == maxNumNeighbors) {
+                verticesWithMostNeighbors.add(v);
+            }
+        }
+
+        // Sort by ID for deterministic results
+        verticesWithMostNeighbors.stream()
+                .min(Comparator.comparing(InventoryVertex::getId))
+                // Shift the offset by the *new* position of this vertex to map it to the origin
+                .ifPresent(v -> {
+                    final Point2D newPosition = layout.getPosition(v);
+                    offset.setLocation(offset.getX() - newPosition.getX(), offset.getY() - newPosition.getY());
+                });
+
+        // X = ( x + offset ) * scale
+        // Y = ( Y + offset ) * scale
+        //
         // Store the new positions in the layout
         for(InventoryVertex v : g.getVertices()) {
             Point2D pos = layout.getPosition(v);
-            v.setX((float)pos.getX() / 100);
-            v.setY((float)pos.getY() / 100);
+            v.setX(((float)(pos.getX() + offset.getX()) * scale));
+            v.setY(((float)(pos.getY() + offset.getY()) * scale));
         }
     }
 
@@ -35,7 +70,7 @@ public class ForceBasedLayoutStrategy implements LayoutStrategy  {
      */
     private static class D3TopoLayout<V extends XY, E> {
 
-        private static final double LINK_DISTANCE = 150.0;
+        private static final double LINK_DISTANCE = 3.0;
         private static final double LINK_STRENGTH = 2.0;
         private static final int DEFAULT_CHARGE = -1200;
         private double EPSILON = 0.00000000001D;

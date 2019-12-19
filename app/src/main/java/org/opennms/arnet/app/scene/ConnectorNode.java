@@ -30,7 +30,7 @@ public class ConnectorNode extends Node {
         final Quaternion rotationFromAToB =
                 Quaternion.lookRotation(directionFromTopToBottom, Vector3.up());
 
-        setLocalScale(new Vector3( 0.1f, 0.1f, difference.length() * 100));
+        setLocalScale(new Vector3( 0.5f, 0.5f, difference.length() * 100));
         setLocalPosition(Vector3.add(sourcePosition, targetPosition).scaled(.5f));
         setLocalRotation(rotationFromAToB);
     }

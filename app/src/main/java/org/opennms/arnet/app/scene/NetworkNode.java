@@ -34,6 +34,7 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
 
     private final Map<String, InventoryNode> inventoryNodesById = new LinkedHashMap<>();
     private final Map<String, ConnectorNode> connectorNodesById = new LinkedHashMap<>();
+    private MapNode mapNode;
 
     public NetworkNode(Scene scene, RenderableRegistry renderables, ConsumerService consumerService) {
         this.scene = Objects.requireNonNull(scene);
@@ -60,6 +61,9 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
         if (networkManager != null) {
             consumerService.dismiss(networkManager);
         }
+        if (mapNode != null) {
+            removeChild(mapNode);
+        }
     }
 
     private synchronized void doInit() {
@@ -73,6 +77,13 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
         delegate = new NetworkListenerDelegate();
         networkManager = new NetworkManager(delegate);
         consumerService.accept(networkManager);
+
+        // Create the map
+        mapNode = new MapNode();
+        mapNode.setParent(this);
+        mapNode.setRenderable(renderables.getMap());
+        mapNode.setWorldScale(new Vector3(3f, 3f, 3f));
+        mapNode.setLocalPosition(new Vector3(0.0f, 0.0f, 0.0f));
     }
 
     @Override
@@ -81,7 +92,6 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
             InventoryNode node = new InventoryNode(v);
             node.setParent(this);
             node.setRenderable(renderables.getRedBall());
-            node.setWorldScale(new Vector3(0.1f, 0.1f, 0.1f));
             return node;
         });
     }

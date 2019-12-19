@@ -73,6 +73,14 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    /**
+     * Called when a new image is detected *after* the
+     * network has been added to the scene.
+     */
+    fun onNewImageDetected(image: AugmentedImage) {
+        // pass
+    }
+
     fun onUpdateFrame(frameTime: FrameTime) {
         // Grab the frame, or return if there is none
         val frame: Frame = arFragment.arSceneView.arFrame ?: return
@@ -101,6 +109,8 @@ class MainActivity : AppCompatActivity() {
                         node.setImage(augmentedImage)
                         augmentedImageMap[augmentedImage] = node
                         arFragment.arSceneView.scene.addChild(node)
+                        // For additional hooks
+                        onNewImageDetected(augmentedImage)
                     }
                 }
                 TrackingState.STOPPED -> {
