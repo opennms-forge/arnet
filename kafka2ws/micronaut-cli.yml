@@ -1,5 +1,0 @@
-profile: service
-defaultPackage: org.opennms.arnet.kafka2ws
----
-testFramework: spek
-sourceLanguage: kotlin
