@@ -19,7 +19,7 @@ data class StreamMessage(val type: MessageType, val payload: Any)
 
 // Use these to generate a response
 fun alarmMessage(alarm: Alarm) = StreamMessage(MessageType.Alarm, alarm)
-fun alarmDeleteMessage(reductionKey: String) = StreamMessage(MessageType.AlarmDelete, AlarmDelete(reductionKey))
+fun alarmDeleteMessage(reductionKey: String, isSituation: Boolean) = StreamMessage(MessageType.AlarmDelete, AlarmDelete(reductionKey, isSituation))
 fun edgeMessage(edge: TopologyEdge) = StreamMessage(MessageType.Edge, edge)
 fun edgeDeleteMessage(edge: TopologyEdge) = StreamMessage(MessageType.EdgeDelete, edge)
 fun eventMessage(event: InMemoryEvent) = StreamMessage(MessageType.Event, event)

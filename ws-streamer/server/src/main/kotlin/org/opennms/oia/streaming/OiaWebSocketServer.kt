@@ -201,7 +201,7 @@ class OiaWebSocketServer(
             alarmCache[alarmId]?.let { alarm ->
                 generateAlarmReceivers(alarm)?.let { receivers ->
                     log.debug("Broadcasting alarm delete for reduction key '$reductionKey' to receivers '$receivers'")
-                    broadcast(mapper.writeValueAsBytes(alarmDeleteMessage(reductionKey)), receivers)
+                    broadcast(mapper.writeValueAsBytes(alarmDeleteMessage(reductionKey, alarm.isSituation)), receivers)
                 }
             }
 
