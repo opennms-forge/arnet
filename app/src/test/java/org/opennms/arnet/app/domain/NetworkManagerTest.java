@@ -22,13 +22,15 @@ public class NetworkManagerTest implements NetworkListener {
         mockConsumerService.accept(networkManager);
 
         List<InventoryVertex> vertices = networkManager.getInventoryVertices();
-        assertThat(vertices, hasSize(3));
+        assertThat(vertices, hasSize(5));
         assertThat(vertices.get(0), hasPosition(0.0f, 0.0f));
         assertThat(vertices.get(1), hasPosition(1.0f, 1.0f));
         assertThat(vertices.get(2), hasPosition(2.0f, 2.0f));
+        assertThat(vertices.get(3), hasPosition(3.0f, 3.0f));
+        assertThat(vertices.get(4), hasPosition(4.0f, 4.0f));
 
         List<InventoryEdge> edges = networkManager.getInventoryEdges();
-        assertThat(edges, hasSize(2));
+        assertThat(edges, hasSize(4));
     }
 
     public static Matcher<InventoryVertex> hasPosition(float x, float y) {
