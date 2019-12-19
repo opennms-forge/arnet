@@ -1,5 +1,6 @@
 package org.opennms.arnet.app
 
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.GestureDetector
@@ -7,17 +8,23 @@ import android.view.MotionEvent
 import android.view.View
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
-import com.google.ar.core.AugmentedImage
-import com.google.ar.core.Frame
-import com.google.ar.core.TrackingState
-import com.google.ar.sceneform.FrameTime
-import com.google.ar.sceneform.SceneView
 import com.google.ar.sceneform.ux.ArFragment
 import org.opennms.arnet.WebSocketConsumerService
 import org.opennms.arnet.app.mock.MockConsumerService
 import org.opennms.arnet.app.scene.NetworkNode
 import org.opennms.arnet.app.scene.RenderableRegistry
 import java.util.concurrent.atomic.AtomicBoolean
+import com.google.ar.sceneform.Scene.OnPeekTouchListener
+import android.graphics.Color.LTGRAY
+import com.google.ar.sceneform.ux.FootprintSelectionVisualizer
+import com.google.ar.sceneform.ux.TransformationSystem
+import androidx.core.app.ComponentActivity
+import androidx.core.app.ComponentActivity.ExtraData
+import androidx.core.content.ContextCompat.getSystemService
+import android.icu.lang.UCharacter.GraphemeClusterBreak.T
+import com.google.ar.core.*
+import com.google.ar.sceneform.*
+import com.google.ar.sceneform.ux.TransformableNode
 
 
 class MainActivity : AppCompatActivity() {
@@ -49,6 +56,7 @@ class MainActivity : AppCompatActivity() {
                 return true
             }
         })
+
         arFragment.getArSceneView().setOnTouchListener { _, event -> gestureDetector.onTouchEvent(event) }
 
         // Load our renderables (3D assets)
@@ -56,6 +64,26 @@ class MainActivity : AppCompatActivity() {
 
         // Start listening for tracked images
         arFragment.getArSceneView().getScene().addOnUpdateListener(this::onUpdateFrame);
+
+
+        arFragment.setOnTapArPlaneListener { hitResult: HitResult, plane: Plane, motionEvent: MotionEvent ->
+//            if (renderables == null) {
+//                return@setOnTapArPlaneListener
+//            }
+
+            // Create the Anchor.
+            val anchor = hitResult.createAnchor()
+            val anchorNode = AnchorNode(anchor)
+            anchorNode.setParent(arFragment.arSceneView.scene)
+
+            // Create the transformable andy and add it to the anchor.
+            val andy = TransformableNode(arFragment.transformationSystem)
+            andy.setParent(anchorNode)
+            andy.renderable = renderables.map
+            andy.select();
+        }
+        Log.i("TGGG===11: ", "tag")
+
     }
 
     override fun onPause() {
@@ -72,6 +100,14 @@ class MainActivity : AppCompatActivity() {
         consumerService.stop()
         super.onDestroy()
     }
+
+//    private void onFrameUpdate(FrameTime frameTime) {
+//        Log.i(TAG,"onFrameUpdate");
+//        if(!modelPlaced){
+//            placeModel();
+//        }
+//    }
+
 
     /**
      * Called when a new image is detected *after* the

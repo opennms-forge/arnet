@@ -1,16 +1,25 @@
 package org.opennms.arnet.app.scene;
 
 import android.util.Log;
+import android.view.MotionEvent;
 
+import com.google.ar.core.Anchor;
 import com.google.ar.core.AugmentedImage;
+import com.google.ar.core.HitResult;
+import com.google.ar.core.Plane;
 import com.google.ar.sceneform.AnchorNode;
 import com.google.ar.sceneform.FrameTime;
 import com.google.ar.sceneform.Scene;
 import com.google.ar.sceneform.math.Vector3;
 import com.google.ar.sceneform.utilities.AndroidPreconditions;
+import com.google.ar.sceneform.ux.ArFragment;
+import com.google.ar.sceneform.ux.BaseArFragment;
+import com.google.ar.sceneform.ux.TransformableNode;
+import com.google.ar.sceneform.ux.TransformationSystem;
 
 import org.jetbrains.annotations.Nullable;
 import org.opennms.arnet.api.ConsumerService;
+import org.opennms.arnet.app.R;
 import org.opennms.arnet.app.domain.InventoryEdge;
 import org.opennms.arnet.app.domain.InventoryVertex;
 import org.opennms.arnet.app.domain.NetworkManager;
@@ -19,6 +28,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import com.google.ar.sceneform.ux.BaseTransformableNode;
 
 public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, NetworkListenerDelegate.Visitor {
     private static final String TAG = "NetworkNode";
@@ -35,6 +45,8 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
     private final Map<String, InventoryNode> inventoryNodesById = new LinkedHashMap<>();
     private final Map<String, ConnectorNode> connectorNodesById = new LinkedHashMap<>();
     private MapNode mapNode;
+
+    private BaseArFragment arFragment;
 
     public NetworkNode(Scene scene, RenderableRegistry renderables, ConsumerService consumerService) {
         this.scene = Objects.requireNonNull(scene);
@@ -78,12 +90,13 @@ public class NetworkNode extends AnchorNode implements Scene.OnUpdateListener, N
         networkManager = new NetworkManager(delegate);
         consumerService.accept(networkManager);
 
-        // Create the map
         mapNode = new MapNode();
+        mapNode.setLocalScale(new Vector3(2.25f, 2.25f, 2.25f));
         mapNode.setParent(this);
         mapNode.setRenderable(renderables.getMap());
         mapNode.setWorldScale(new Vector3(3f, 3f, 3f));
         mapNode.setLocalPosition(new Vector3(0.0f, 0.0f, 0.0f));
+
     }
 
     @Override
