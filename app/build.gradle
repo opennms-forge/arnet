@@ -41,8 +41,8 @@ dependencies {
     implementation 'org.java-websocket:Java-WebSocket:1.4.0'
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.9.8'
     implementation 'com.fasterxml.jackson.module:jackson-module-kotlin:2.9.8'
-
-    implementation 'org.opennms.arnet:model:1.0-SNAPSHOT'
+    implementation 'org.opennms.oia.streaming:oia-streaming-model:1.0-SNAPSHOT'
+    implementation 'org.opennms.integration.api:api:0.2.1'
 
 
     // Use the Sceneform UX Package pre-built from Maven.
