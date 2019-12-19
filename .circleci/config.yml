@@ -15,7 +15,7 @@ jobs:
          command: sudo chmod +x ./gradlew
       - run:
           name: Build & install common model
-          command: cd ws-streamer && mvn install
+          command: cd ws-streamer && chmod +x ./mvnw && ./mvnw install
       - run:
           name: Download Dependencies
           command: ./gradlew androidDependencies
