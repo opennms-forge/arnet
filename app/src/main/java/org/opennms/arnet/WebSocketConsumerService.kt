@@ -9,7 +9,10 @@ import edu.uci.ics.jung.graph.SparseMultigraph
 import org.java_websocket.handshake.ServerHandshake
 import org.opennms.arnet.api.Consumer
 import org.opennms.arnet.api.ConsumerService
-import org.opennms.arnet.model.*
+import org.opennms.arnet.api.model.Edge
+import org.opennms.arnet.api.model.Vertex
+import org.opennms.integration.api.v1.model.*
+import org.opennms.oia.streaming.model.*
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -26,6 +29,10 @@ class WebSocketConsumerService : ConsumerService {
     private val consumers = CopyOnWriteArrayList<Consumer>()
 
     private val mapper = jacksonObjectMapper()
+
+    private val vertices = mutableMapOf<String, Vertex>()
+
+    private val edges = mutableMapOf<String, Edge>()
 
     override fun accept(consumer: Consumer) {
         Log.i(TAG, "Adding consumer.")
@@ -68,22 +75,20 @@ class WebSocketConsumerService : ConsumerService {
 
         override fun onOpen(handshakedata: ServerHandshake) {
             Log.i(TAG, "open: status '${handshakedata.httpStatus}'")
-            send(mapper.writeValueAsString(ArnetRequest(RequestAction.SUBSCRIBE, FILTER_CRITERIA)))
+            send(mapper.writeValueAsString(StreamRequest(RequestAction.SUBSCRIBE, FILTER_CRITERIA)))
         }
 
         override fun onMessage(message: String) {
             Log.d(TAG, "message: $message")
 
-            val response : ArnetResponse = mapper.readValue(message,
-                ArnetResponse::class.java)
+            val response : StreamMessage = mapper.readValue(message, StreamMessage::class.java)
 
             when(response.type) {
-                ResponseType.Alarm -> processAlarm(response)
-                ResponseType.Edge -> processEdge(response)
-                ResponseType.Event -> processEvent(response)
-                ResponseType.Topology -> processTopology(response)
-                ResponseType.Situation -> processSituation(response)
-                ResponseType.Vertex -> processVertex(response)
+                MessageType.Alarm -> processAlarm(response)
+                MessageType.Edge -> processEdge(response)
+                MessageType.Event -> processEvent(response)
+                MessageType.Topology -> processTopology(response)
+                MessageType.Node -> processNode(response)
                 else -> Log.e(TAG, "Unsupported message type '${response.type}'")
             }
         }
@@ -97,205 +102,336 @@ class WebSocketConsumerService : ConsumerService {
             ex.printStackTrace(PrintWriter(sw))
             Log.e(TAG, "error: $sw")
         }
+    }
 
-        fun processAlarm(response: ArnetResponse) {
-            val alarm = mapper.convertValue<Alarm>(response.payload)
-            Log.i(TAG, "Processing alarm ${alarm.reductionKey}")
-            consumers.forEach { c ->
-                try {
+    fun processAlarm(response: StreamMessage) {
+        val alarm = mapper.convertValue<Alarm>(response.payload)
+        Log.i(TAG, "Processing alarm ${alarm.reductionKey}")
+        consumers.forEach { c ->
+            try {
+                if (alarm.isSituation) {
+                    c.acceptSituation(convertSituation(alarm))
+                } else {
                     c.acceptAlarm(convertAlarm(alarm))
-                } catch (e: Error) {
-                    Log.e(TAG, "Consumer unable to process alarm ${alarm.reductionKey} : $e")
                 }
+            } catch (er: Error) {
+                Log.e(TAG, "Consumer unable to process alarm ${alarm.reductionKey} : $er")
+            }
+        }
+    }
+
+    fun processEdge(response: StreamMessage) {
+        val edge = mapper.convertValue<TopologyEdge>(response.payload)
+        Log.i(TAG, "Processing edge ${edge.id}")
+        val ve = convertTopologyEdge(edge)
+
+        consumers.forEach { consumer ->
+            try {
+                if (vertices.containsKey(ve.vertices.src.id)) {
+                    Log.d(TAG, "Update to vertex ${ve.vertices.src.id}")
+                    // TODO: currently not supported...
+                } else {
+                    Log.d(TAG, "New vertex ${ve.vertices.src.id}")
+                    vertices.put(ve.vertices.src.id, ve.vertices.src)
+                    consumer.acceptVertex(ve.vertices.src)
+                }
+
+                if (vertices.containsKey(ve.vertices.dst.id)) {
+                    Log.d(TAG, "Update to vertex ${ve.vertices.dst.id}")
+                    // TODO: currently not supported...
+                } else {
+                    Log.d(TAG, "New vertex ${ve.vertices.dst.id}")
+                    vertices.put(ve.vertices.dst.id, ve.vertices.dst)
+                    consumer.acceptVertex(ve.vertices.dst)
+                }
+
+                if (edges.containsKey(ve.edge.id)) {
+                    Log.d(TAG, "Update to edge ${ve.edge.id}")
+                    // TODO: currently not supported...
+                } else {
+                    Log.d(TAG, "New edge ${ve.edge.id}")
+                    edges.put(ve.edge.id, ve.edge)
+                    consumer.acceptEdge(ve.edge)
+                }
+            } catch (er : Error) {
+                Log.e(TAG, "Consumer unable to process edge ${edge.id} : $er")
+            }
+        }
+    }
+
+    fun processEvent(response: StreamMessage) {
+        val event = mapper.convertValue<InMemoryEvent>(response.payload)
+        Log.i(TAG, "Processing event ${event.uei}")
+        consumers.forEach {
+            try {
+                it.acceptEvent(convertEvent(event))
+            } catch (e: Error) {
+                Log.e(TAG, "Consumer unable to process event ${event.uei} : $e")
+            }
+        }
+    }
+
+    fun processTopology(response: StreamMessage) {
+        Log.i(TAG, "Processing topology")
+        val topology = mapper.convertValue<Topology>(response.payload)
+        val graph: Graph<Vertex, Edge> = SparseMultigraph()
+
+        edges.clear()
+        vertices.clear()
+
+        // Handles node in Topology
+        // Nodes appear directly in Topology and are contained in TopologyEdge - reason being: a
+        // node can "dangle" (e.g. no edges)
+        topology.nodes
+            ?.map { n -> convertNode(n) }
+            ?.map { it.id to it }
+            ?.toMap()
+            ?.toMutableMap()
+            ?.let { nodesDirect -> vertices.putAll(nodesDirect) }
+
+        // Handles node, port, and segment in each TopologyEdge
+        // Handles edges
+        topology.edges?.forEach {
+            val ve = convertTopologyEdge(it)
+            edges.put(ve.edge.id, ve.edge)
+            vertices.put(ve.vertices.src.id, ve.vertices.src)
+            vertices.put(ve.vertices.dst.id, ve.vertices.dst)
+        }
+
+        // Add vertices to graph
+        vertices.values.forEach { graph.addVertex(it) }
+
+        // Add edges to graph
+        edges.values.forEach { graph.addEdge(it, it.sourceVertex, it.targetVertex) }
+
+        Log.i(TAG, "Graph contains ${graph.vertexCount} vertices " +
+                "and ${graph.edgeCount} edges. There are ${topology.alarms?.size} alarms " +
+                "and situations")
+
+        consumers.forEach {
+            try {
+                it.accept(graph,
+                    topology.alarms?.filter { !it.isSituation }?.map { convertAlarm(it) },
+                    topology.alarms?.filter { it.isSituation }?.map { convertSituation(it) })
+            } catch (e: Error) {
+                Log.e(TAG, "Consumer unable to process topology : $e")
+            }
+        }
+    }
+
+    fun processNode(response: StreamMessage) {
+        val node = mapper.convertValue<Node>(response.payload)
+        Log.i(TAG, "Processing node ${node.id}")
+        val convNode = convertNode(node)
+        consumers.forEach {
+            try {
+                if (vertices.containsKey(convNode.id)) {
+                    Log.d(TAG, "Update to node ${convNode.id}")
+                    // TODO: currently not supported...
+                } else {
+                    Log.d(TAG, "New vertex ${convNode.id}")
+                    vertices.put(convNode.id, convNode)
+                    it.acceptVertex(convNode)
+                }
+            } catch (e: Error) {
+                Log.e(TAG, "Consumer unable to process node ${node.id} : $e")
+            }
+        }
+    }
+
+    fun convertTopologyEdge(topologyEdge : TopologyEdge) : EdgeVertex {
+
+        lateinit var srcVertex: Vertex
+        lateinit var dstVertex: Vertex
+
+        topologyEdge.visitEndpoints(object : TopologyEdge.EndpointVisitor {
+            override fun visitSource(node: Node?) {
+                if (node != null) {
+                    srcVertex = convertNode(node)
+                }
+            }
+
+            override fun visitSource(port: TopologyPort?) {
+                if (port != null) {
+                    srcVertex = convertPort(port)
+                }
+            }
+
+            override fun visitSource(segment: TopologySegment?) {
+                if (segment != null) {
+                    srcVertex = convertSegment(segment)
+                }
+            }
+
+            override fun visitTarget(node: Node?) {
+                if (node != null) {
+                    dstVertex = convertNode(node)
+                }
+            }
+
+            override fun visitTarget(port: TopologyPort?) {
+                if (port != null) {
+                    dstVertex = convertPort(port)
+                }
+            }
+
+            override fun visitTarget(segment: TopologySegment?) {
+                if (segment != null) {
+                    dstVertex = convertSegment(segment)
+                }
+            }
+        })
+
+        val edge = object : Edge {
+            override fun getId(): String {
+                return topologyEdge.id + "-" + topologyEdge.protocol.name
+            }
+
+            override fun getSourceVertex(): Vertex {
+                  return srcVertex
+            }
+
+            override fun getTargetVertex(): Vertex {
+                return dstVertex
+            }
+
+            override fun getProtocol(): String {
+                return topologyEdge.protocol.name
             }
         }
 
-        fun processEdge(response: ArnetResponse) {
-            val edge = mapper.convertValue<Edge>(response.payload)
-            Log.i(TAG, "Processing edge ${edge.id}")
-            consumers.forEach { c ->
-                try {
-                    c.acceptEdge(convertEdge(edge))
-                } catch (e: Error) {
-                    Log.e(TAG, "Consumer unable to process edge ${edge.id} : $e")
-                }
+        return EdgeVertex(edge, VertexPair(srcVertex, dstVertex))
+    }
+
+    data class EdgeVertex(val edge: Edge, val vertices: VertexPair)
+
+    data class VertexPair(val src: Vertex, val dst: Vertex)
+
+
+    fun convertAlarm(alarm: Alarm) : org.opennms.arnet.api.model.Alarm {
+        return object : org.opennms.arnet.api.model.Alarm {
+
+            override fun getReductionKey(): String {
+                return alarm.reductionKey
+            }
+
+            override fun getSeverity(): org.opennms.arnet.api.model.Alarm.Severity {
+                return org.opennms.arnet.api.model.Alarm.Severity.valueOf(
+                    alarm.severity.name
+                )
+            }
+
+            override fun getDescription(): String {
+                return alarm.description
+            }
+
+            override fun getLastUpdated(): Date {
+                return alarm.lastEventTime
+            }
+
+            override fun getVertexId(): String {
+                return alarm.node.id.toString()
             }
         }
+    }
 
-        fun processEvent(response: ArnetResponse) {
-            val event = mapper.convertValue<Event>(response.payload)
-            Log.i(TAG, "Processing event ${event.UEI}")
-            consumers.forEach { c ->
-                try {
-                    c.acceptEvent(convertEvent(event))
-                } catch (e: Error) {
-                    Log.e(TAG, "Consumer unable to process event ${event.UEI} : $e")
-                }
+    fun convertEvent(event: InMemoryEvent) : org.opennms.arnet.api.model.Event {
+        return object : org.opennms.arnet.api.model.Event {
+            override fun getUEI(): String {
+                return event.uei
+            }
+
+            override fun getDescription(): String {
+                // TODO: can this be generated?
+                return ""
+            }
+
+            override fun getTime(): Date {
+                // TODO: can this be generated?
+                return Date()
+            }
+
+            override fun getVertexId(): String {
+                return event.nodeId.toString()
             }
         }
+    }
 
-        fun processTopology(response: ArnetResponse) {
-            Log.i(TAG, "Processing topology")
-            val topology = mapper.convertValue<Topology>(response.payload)
-
-            val graph: Graph<org.opennms.arnet.api.model.Vertex,
-                    org.opennms.arnet.api.model.Edge> = SparseMultigraph()
-
-            Log.i(TAG, "Processing ${topology.vertices?.size} vertices, " +
-                    "${topology.edges?.size} edges, ${topology.alarms?.size} alarms, " +
-                    "and ${topology.situations?.size} situations")
-
-            topology.vertices?.forEach { v -> graph.addVertex(convertVertex(v)) }
-            topology.edges?.forEach { e ->
-                val em = convertEdge(e)
-                graph.addEdge(em, em.sourceVertex, em.targetVertex)
+    fun convertSituation(situation: Alarm) : org.opennms.arnet.api.model.Situation {
+        return object : org.opennms.arnet.api.model.Situation {
+            override fun getReductionKey(): String {
+                return situation.reductionKey
             }
 
-            consumers.forEach { c ->
-                try {
-                    c.accept(graph,
-                        topology.alarms?.map { a -> convertAlarm(a) },
-                        topology.situations?.map { s -> convertSituation(s) })
-                } catch (e: Error) {
-                    Log.e(TAG, "Consumer unable to process topology : $e")
-                }
+            override fun getSeverity(): org.opennms.arnet.api.model.Alarm.Severity {
+                return org.opennms.arnet.api.model.Alarm.Severity.valueOf(
+                    situation.severity.name)
             }
-        }
 
-        fun processSituation(response: ArnetResponse) {
-            val situation = mapper.convertValue<Situation>(response.payload)
-            Log.i(TAG, "Processing situation ${situation.alarm.reductionKey}")
-            consumers.forEach { c ->
-                try {
-                    c.acceptSituation(convertSituation(situation))
-                } catch (e: Error) {
-                    Log.e(TAG, "Consumer unable to process situation " +
-                                "${situation.alarm.reductionKey} : $e")
-                }
+            override fun getDescription(): String {
+                return situation.description
+            }
+
+            override fun getLastUpdated(): Date {
+                return situation.lastEventTime
+            }
+
+            override fun getVertexId(): String {
+                return situation.node.id.toString()
+            }
+
+            override fun getRelatedAlarms(): MutableSet<org.opennms.arnet.api.model.Alarm> {
+                return situation.relatedAlarms.map { a -> convertAlarm(a) }.toMutableSet()
             }
         }
+    }
 
-        fun processVertex(response: ArnetResponse) {
-            val vertex = mapper.convertValue<Vertex>(response.payload)
-            Log.i(TAG, "Processing vertex ${vertex.id}")
-            consumers.forEach { c ->
-                try {
-                    c.acceptVertex(convertVertex(vertex))
-                } catch (e: Error) {
-                    Log.e(TAG, "Consumer unable to process vertex ${vertex.id} : $e")
-                }
+    fun convertNode(node: Node) : Vertex {
+        return object : Vertex {
+            override fun getId(): String {
+                return node.id.toString()
+            }
+
+            override fun getLabel(): String {
+                return node.label
+            }
+
+            override fun getType(): Vertex.Type {
+                return Vertex.Type.Node
             }
         }
+    }
 
-        fun convertAlarm(alarm: Alarm) : org.opennms.arnet.api.model.Alarm {
-            return object : org.opennms.arnet.api.model.Alarm {
+    fun convertPort(port: TopologyPort) : Vertex {
+        return object : Vertex {
+            override fun getId(): String {
+                return port.id.toString()
+            }
 
-                override fun getReductionKey(): String {
-                    return alarm.reductionKey
-                }
+            override fun getLabel(): String {
+                // TODO: can this be generated?
+                return ""
+            }
 
-                override fun getSeverity(): org.opennms.arnet.api.model.Alarm.Severity {
-                    return org.opennms.arnet.api.model.Alarm.Severity.valueOf(
-                        alarm.severity.name
-                    )
-                }
-
-                override fun getDescription(): String {
-                    return alarm.description
-                }
-
-                override fun getLastUpdated(): Date {
-                    return alarm.lastUpdated
-                }
-
-                override fun getVertexId(): String {
-                    return alarm.vertexId
-                }
+            override fun getType(): Vertex.Type {
+                return Vertex.Type.Port
             }
         }
+    }
 
-        fun convertEdge(edge: Edge) : org.opennms.arnet.api.model.Edge {
-            return object : org.opennms.arnet.api.model.Edge {
-                override fun getId(): String {
-                    return edge.id
-                }
-
-                override fun getSourceVertex(): org.opennms.arnet.api.model.Vertex {
-                    return convertVertex(edge.sourceVertex)
-                }
-
-                override fun getTargetVertex(): org.opennms.arnet.api.model.Vertex {
-                    return convertVertex(edge.targetVertex)
-                }
-
-                override fun getProtocol(): String {
-                    return edge.protocol
-                }
+    fun convertSegment(segment: TopologySegment) : Vertex {
+        return object : Vertex {
+            override fun getId(): String {
+                return segment.id.toString()
             }
-        }
 
-        fun convertEvent(event: Event) : org.opennms.arnet.api.model.Event {
-            return object : org.opennms.arnet.api.model.Event {
-                override fun getUEI(): String {
-                    return event.UEI
-                }
-
-                override fun getDescription(): String {
-                    return event.description
-                }
-
-                override fun getTime(): Date {
-                    return event.time
-                }
-
-                override fun getVertexId(): String {
-                    return event.vertexId
-                }
+            override fun getLabel(): String {
+                // TODO: can this be generated?
+                return ""
             }
-        }
 
-        fun convertSituation(situation: Situation) : org.opennms.arnet.api.model.Situation {
-            return object : org.opennms.arnet.api.model.Situation {
-                override fun getReductionKey(): String {
-                    return situation.alarm.reductionKey
-                }
-
-                override fun getSeverity(): org.opennms.arnet.api.model.Alarm.Severity {
-                    return org.opennms.arnet.api.model.Alarm.Severity.valueOf(
-                        situation.alarm.severity.name)
-                }
-
-                override fun getDescription(): String {
-                    return situation.alarm.description
-                }
-
-                override fun getLastUpdated(): Date {
-                    return situation.alarm.lastUpdated
-                }
-
-                override fun getVertexId(): String {
-                    return situation.alarm.vertexId
-                }
-
-                override fun getRelatedAlarms(): MutableSet<org.opennms.arnet.api.model.Alarm> {
-                    return situation.relatedAlarms.map { a -> convertAlarm(a) }.toMutableSet()
-                }
-            }
-        }
-
-        fun convertVertex(vertex: Vertex) : org.opennms.arnet.api.model.Vertex {
-            return object : org.opennms.arnet.api.model.Vertex {
-                override fun getId(): String {
-                    return vertex.id
-                }
-
-                override fun getLabel(): String {
-                    return vertex.label
-                }
-
-                override fun getType(): org.opennms.arnet.api.model.Vertex.Type {
-                    return org.opennms.arnet.api.model.Vertex.Type.valueOf(vertex.type.name)
-                }
+            override fun getType(): Vertex.Type {
+                return Vertex.Type.Segment
             }
         }
     }
@@ -305,7 +441,8 @@ class WebSocketConsumerService : ConsumerService {
         private val TAG = "WebSocketConsumerService"
 
         /**
-         * TODO: update this accordingly!
+         * The WebSocket server IP and port.
+         * Remember to update this accordingly!
          */
         private val WEB_SOCKET_SERVER = "ws://172.20.50.148:8080"
 
