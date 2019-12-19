@@ -1,0 +1,2 @@
+ulf_in_space.png|app/src/main/assets/targets/ulf_in_space.png
+ulf_in_space_grayscale.png|app/src/main/assets/targets/ulf_in_space_grayscale.png

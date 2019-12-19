@@ -36,5 +36,12 @@ Use Android Studio to build and launch
 Note: update constant 'WEB_SOCKET_SERVER' in class 'WebSocketConsumerService' to reflect the
 IP and port of the backend.
 
+## Updating/adding targets
 
+Add image to the `app/src/main/assets/targets` directory and run:
+```
+arcoreimg build-db --input_images_directory=app/src/main/assets/targets --output_db_path=app/src/main/assets/targets.imgdb
+```
+
+See [arcoreimg](//developers.google.com/ar/develop/c/augmented-images/arcoreimg) for details
 

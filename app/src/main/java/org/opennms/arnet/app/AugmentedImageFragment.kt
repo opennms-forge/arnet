@@ -15,7 +15,7 @@ import java.io.IOException
 class AugmentedImageFragment : ArFragment() {
     companion object {
         private val TAG = "AugmentedImageFragment"
-        private val IMAGE_DATABASE = "kiwi.imgdb"
+        private val IMAGE_DATABASE = "targets.imgdb"
     }
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View? {
