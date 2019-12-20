@@ -40,7 +40,7 @@ class WsClient(serverURI: URI) : WebSocketClient(serverURI) {
             val msg = jacksonObjectMapper().readValue<StreamMessage>(bytes.array())
             
             when(msg.type) {
-                MessageType.Topology -> println(oiaDeserializer.convertValue<Topology>(msg.payload))
+                MessageType.Topology -> println(msg.deserializePayload<Topology>())
             }
         } catch (e: Exception) {
             e.printStackTrace()

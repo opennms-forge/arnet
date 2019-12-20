@@ -1,7 +1,6 @@
 package org.opennms.arnet
 
 import android.util.Log
-import com.fasterxml.jackson.module.kotlin.convertValue
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.google.common.collect.Maps
@@ -32,8 +31,6 @@ class WebSocketConsumerService : ConsumerService {
     private val consumers = CopyOnWriteArrayList<Consumer>()
 
     private val mapper = jacksonObjectMapper()
-
-    private val oiaMapper = oiaDeserializer
 
     private val vertices = mutableMapOf<String, Vertex>()
 
@@ -117,7 +114,7 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     fun processAlarm(message: StreamMessage) {
-        val alarm = oiaMapper.convertValue<Alarm>(message.payload)
+        val alarm = message.deserializePayload<Alarm>()
         Log.i(TAG, "Processing alarm ${alarm.reductionKey}")
         consumers.forEach { c ->
             try {
@@ -133,7 +130,7 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     fun processAlarmDelete(message: StreamMessage) {
-        val alarm = oiaMapper.convertValue<AlarmDelete>(message.payload)
+        val alarm = message.deserializePayload<AlarmDelete>()
         Log.i(TAG, "Processing alarm deletion ${alarm.reductionKey}")
         consumers.forEach { c ->
             try {
@@ -149,7 +146,7 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     fun processEdge(message: StreamMessage) {
-        val edge = oiaMapper.convertValue<TopologyEdge>(message.payload)
+        val edge = message.deserializePayload<TopologyEdge>()
         Log.i(TAG, "Processing edge ${edge.id}")
         val ve = convertTopologyEdge(edge)
 
@@ -188,7 +185,7 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     fun processEdgeDelete(message: StreamMessage) {
-        val edge = oiaMapper.convertValue<TopologyEdge>(message.payload)
+        val edge = message.deserializePayload<TopologyEdge>()
         Log.i(TAG, "Processing edge delete ${edge.id}")
 
         consumers.forEach { consumer ->
@@ -207,7 +204,7 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     fun processEvent(message: StreamMessage) {
-        val event = oiaMapper.convertValue<InMemoryEvent>(message.payload)
+        val event = message.deserializePayload<InMemoryEvent>()
         Log.i(TAG, "Processing event ${event.uei}")
         consumers.forEach {
             try {
@@ -220,7 +217,7 @@ class WebSocketConsumerService : ConsumerService {
 
     fun processTopology(message: StreamMessage) {
         Log.i(TAG, "Processing topology")
-        val topology = oiaMapper.convertValue<Topology>(message.payload)
+        val topology = message.deserializePayload<Topology>()
         val graph: Graph<Vertex, Edge> = SparseMultigraph()
 
         edges.clear()
@@ -279,7 +276,7 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     fun processNode(message: StreamMessage) {
-        val node = oiaMapper.convertValue<Node>(message.payload)
+        val node = message.deserializePayload<Node>()
         Log.i(TAG, "Processing node ${node.id}")
         val convNode = convertNode(node)
         consumers.forEach {
