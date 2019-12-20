@@ -295,11 +295,17 @@ class OiaWebSocketServer(
             return
         }
 
-        nodeCache[event.nodeId]?.let { eventNode ->
-            generateNodeReceivers(eventNode)?.let { receivers ->
-                log.debug("Broadcasting event '$event' to receivers '$receivers'")
-                broadcast(mapper.writeValueAsBytes(eventMessage(event)), receivers)
-            }
+        log.info("Checking if node needs to be derived")
+        val node = nodeCache[event.nodeId] ?: run {
+            log.info("Attempting to derive node for id '${event.nodeId}'")
+            val foundNode = nodeDao.getNodeById(event.nodeId) ?: error("Could not find node with id '${event.nodeId}'")
+            handleNode(foundNode)
+            foundNode
+        }
+
+        generateNodeReceivers(node)?.let { receivers ->
+            log.debug("Broadcasting event '$event' to receivers '$receivers'")
+            broadcast(mapper.writeValueAsBytes(eventMessage(event)), receivers)
         }
     }
 }
