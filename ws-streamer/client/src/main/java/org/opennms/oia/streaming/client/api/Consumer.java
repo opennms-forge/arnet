@@ -1,14 +1,9 @@
-package org.opennms.arnet.api;
-
-import org.opennms.arnet.api.model.Alarm;
-import org.opennms.arnet.api.model.Edge;
-import org.opennms.arnet.api.model.Event;
-import org.opennms.arnet.api.model.Situation;
-import org.opennms.arnet.api.model.Vertex;
+package org.opennms.oia.streaming.client.api;
 
 import java.util.Collection;
 
 import edu.uci.ics.jung.graph.Graph;
+import org.opennms.oia.streaming.client.api.model.*;
 
 public interface Consumer {
 

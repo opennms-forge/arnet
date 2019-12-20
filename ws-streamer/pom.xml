@@ -10,6 +10,7 @@
     <modules>
         <module>model</module>
         <module>server</module>
+        <module>client</module>
     </modules>
 
     <properties>
@@ -18,5 +19,6 @@
         <kotlin.code.style>official</kotlin.code.style>
         <integration.api.version>0.2.1</integration.api.version>
         <jackson.version>2.9.8</jackson.version>
+        <java_websocket.version>1.4.0</java_websocket.version>
     </properties>
 </project>

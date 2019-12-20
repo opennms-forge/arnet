@@ -1,6 +1,6 @@
 package org.opennms.arnet.app.domain;
 
-import org.opennms.arnet.api.model.Alarm;
+import org.opennms.oia.streaming.client.api.model.Alarm;
 
 import java.util.Objects;
 

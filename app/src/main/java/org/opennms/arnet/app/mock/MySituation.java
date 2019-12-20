@@ -1,7 +1,7 @@
 package org.opennms.arnet.app.mock;
 
-import org.opennms.arnet.api.model.Alarm;
-import org.opennms.arnet.api.model.Situation;
+import org.opennms.oia.streaming.client.api.model.Alarm;
+import org.opennms.oia.streaming.client.api.model.Situation;
 
 import java.util.Collection;
 import java.util.Date;

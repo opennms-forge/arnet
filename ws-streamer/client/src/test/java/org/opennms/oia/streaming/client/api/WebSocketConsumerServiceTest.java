@@ -1,14 +1,9 @@
-package org.opennms.arnet.app;
+package org.opennms.oia.streaming.client.api;
 
 import org.junit.Ignore;
 import org.junit.Test;
-import org.opennms.arnet.WebSocketConsumerService;
-import org.opennms.arnet.api.Consumer;
-import org.opennms.arnet.api.model.Alarm;
-import org.opennms.arnet.api.model.Edge;
-import org.opennms.arnet.api.model.Event;
-import org.opennms.arnet.api.model.Situation;
-import org.opennms.arnet.api.model.Vertex;
+import org.opennms.oia.streaming.client.WebSocketConsumerService;
+import org.opennms.oia.streaming.client.api.model.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

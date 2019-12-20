@@ -20,6 +20,7 @@ import org.opennms.arnet.WebSocketConsumerService
 import org.opennms.arnet.app.mock.MockConsumerService
 import org.opennms.arnet.app.scene.NetworkNode
 import org.opennms.arnet.app.scene.RenderableRegistry
+import org.opennms.oia.streaming.client.api.ConsumerService
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 import kotlin.math.min

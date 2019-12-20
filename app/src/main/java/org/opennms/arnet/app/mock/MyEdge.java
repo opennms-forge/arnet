@@ -1,7 +1,7 @@
 package org.opennms.arnet.app.mock;
 
-import org.opennms.arnet.api.model.Edge;
-import org.opennms.arnet.api.model.Vertex;
+import org.opennms.oia.streaming.client.api.model.Edge;
+import org.opennms.oia.streaming.client.api.model.Vertex;
 
 import java.util.Objects;
 

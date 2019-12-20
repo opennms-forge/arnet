@@ -1,11 +1,11 @@
 package org.opennms.arnet.app.mock;
 
-import org.opennms.arnet.api.Consumer;
-import org.opennms.arnet.api.ConsumerService;
-import org.opennms.arnet.api.model.Alarm;
-import org.opennms.arnet.api.model.Edge;
-import org.opennms.arnet.api.model.Situation;
-import org.opennms.arnet.api.model.Vertex;
+import org.opennms.oia.streaming.client.api.Consumer;
+import org.opennms.oia.streaming.client.api.ConsumerService;
+import org.opennms.oia.streaming.client.api.model.Alarm;
+import org.opennms.oia.streaming.client.api.model.Edge;
+import org.opennms.oia.streaming.client.api.model.Situation;
+import org.opennms.oia.streaming.client.api.model.Vertex;
 
 import java.util.ArrayList;
 import java.util.Arrays;

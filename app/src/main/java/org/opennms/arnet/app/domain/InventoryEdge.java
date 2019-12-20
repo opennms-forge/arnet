@@ -1,6 +1,6 @@
 package org.opennms.arnet.app.domain;
 
-import org.opennms.arnet.api.model.Edge;
+import org.opennms.oia.streaming.client.api.model.Edge;
 
 import java.util.Objects;
 

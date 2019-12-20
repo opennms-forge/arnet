@@ -1,7 +1,5 @@
 package org.opennms.arnet.app.domain;
 
-import org.opennms.arnet.api.model.Vertex;
-
 import java.awt.Dimension;
 import java.awt.geom.Point2D;
 import java.util.ArrayList;

@@ -8,11 +8,11 @@ import com.google.ar.sceneform.FrameTime;
 import com.google.ar.sceneform.Scene;
 import com.google.ar.sceneform.math.Vector3;
 
-import org.opennms.arnet.api.ConsumerService;
 import org.opennms.arnet.app.domain.InventoryAlarm;
 import org.opennms.arnet.app.domain.InventoryEdge;
 import org.opennms.arnet.app.domain.InventoryVertex;
 import org.opennms.arnet.app.domain.NetworkManager;
+import org.opennms.oia.streaming.client.api.ConsumerService;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

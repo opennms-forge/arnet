@@ -5,12 +5,12 @@ import android.util.Log;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 
-import org.opennms.arnet.api.Consumer;
-import org.opennms.arnet.api.model.Alarm;
-import org.opennms.arnet.api.model.Edge;
-import org.opennms.arnet.api.model.Event;
-import org.opennms.arnet.api.model.Situation;
-import org.opennms.arnet.api.model.Vertex;
+import org.opennms.oia.streaming.client.api.Consumer;
+import org.opennms.oia.streaming.client.api.model.Alarm;
+import org.opennms.oia.streaming.client.api.model.Edge;
+import org.opennms.oia.streaming.client.api.model.Event;
+import org.opennms.oia.streaming.client.api.model.Situation;
+import org.opennms.oia.streaming.client.api.model.Vertex;
 
 import java.util.ArrayList;
 import java.util.Collection;

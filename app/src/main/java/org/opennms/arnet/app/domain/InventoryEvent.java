@@ -1,6 +1,6 @@
 package org.opennms.arnet.app.domain;
 
-import org.opennms.arnet.api.model.Event;
+import org.opennms.oia.streaming.client.api.model.Event;
 
 import java.util.Objects;
 

@@ -1,6 +1,5 @@
-package org.opennms.arnet
+package org.opennms.oia.streaming.client
 
-import android.util.Log
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import com.google.common.collect.Maps
@@ -8,14 +7,13 @@ import edu.uci.ics.jung.graph.Graph
 import edu.uci.ics.jung.graph.SparseMultigraph
 
 import org.java_websocket.handshake.ServerHandshake
-import org.opennms.arnet.api.Consumer
-import org.opennms.arnet.api.ConsumerService
-import org.opennms.arnet.api.model.Alarm
-import org.opennms.arnet.api.model.Edge
-import org.opennms.arnet.api.model.Situation
-import org.opennms.arnet.api.model.Vertex
 import org.opennms.integration.api.v1.model.*
+import org.opennms.oia.streaming.client.api.Consumer
+import org.opennms.oia.streaming.client.api.ConsumerService
+import org.opennms.oia.streaming.client.api.model.Edge
+import org.opennms.oia.streaming.client.api.model.Vertex
 import org.opennms.oia.streaming.model.*
+import org.slf4j.LoggerFactory
 import java.io.PrintWriter
 import java.io.StringWriter
 
@@ -36,6 +34,8 @@ class WebSocketConsumerService : ConsumerService {
     private val vertices = mutableMapOf<String, Vertex>()
 
     private val edges = mutableMapOf<String, Edge>()
+    
+    private val log = LoggerFactory.getLogger(WebSocketConsumerService::class.java)
 
     private var graph: Graph<Vertex, Edge> = SparseMultigraph()
 
@@ -44,7 +44,7 @@ class WebSocketConsumerService : ConsumerService {
     private val initialSituations = mutableListOf<Situation>()
 
     override fun accept(consumer: Consumer) {
-        Log.i(TAG, "Adding consumer.")
+        log.info("Adding consumer.")
         consumers.add(consumer)
 
         // TODO: only supporting a single consumer
@@ -63,27 +63,27 @@ class WebSocketConsumerService : ConsumerService {
      }
 
     override fun dismiss(consumer: Consumer?) {
-        Log.i(TAG, "Removing consumer.")
+        log.info("Removing consumer.")
         consumers.remove(consumer)
     }
 
     override fun start() {
-        Log.i(TAG, "Starting...")
+        log.info("Starting...")
 
-        Log.i(TAG, "Attempting to connect.")
+        log.info("Attempting to connect.")
         try {
             // Initiates the web socket connection; does not block.
             client.connect()
         } catch (e: InterruptedException) {
-            Log.e(TAG, "Interrupted while attempting to connect")
+            log.info("Interrupted while attempting to connect")
         }
     }
 
     override fun stop() {
-        Log.i(TAG, "Stopping...")
+        log.info("Stopping...")
 
         if (client.isOpen) {
-            Log.i(TAG, "Closing client.")
+            log.info("Closing client.")
             client.close()
         }
     }
@@ -92,7 +92,7 @@ class WebSocketConsumerService : ConsumerService {
         org.java_websocket.client.WebSocketClient(serverURI) {
 
         override fun onOpen(handshakedata: ServerHandshake) {
-            Log.i(TAG, "open: status '${handshakedata.httpStatus}'")
+            log.info("open: status '${handshakedata.httpStatus}'")
 
             if (consumers.isNotEmpty()) {
                 client.send(mapper.writeValueAsString(StreamRequest(
@@ -101,7 +101,7 @@ class WebSocketConsumerService : ConsumerService {
         }
 
         override fun onMessage(message: String) {
-            Log.i(TAG, "message: $message")
+            log.info("message: $message")
 
             val response = mapper.readValue<StreamMessage>(message)
 
@@ -113,7 +113,7 @@ class WebSocketConsumerService : ConsumerService {
                 MessageType.Event -> processEvent(response)
                 MessageType.Topology -> processTopology(response)
                 MessageType.Node -> processNode(response)
-                else -> Log.e(TAG, "Unsupported message type '${response.type}'")
+                else -> log.warn("Unsupported message type '${response.type}'")
             }
         }
 
@@ -123,19 +123,19 @@ class WebSocketConsumerService : ConsumerService {
         }
 
         override fun onClose(code: Int, reason: String, remote: Boolean) {
-            Log.i(TAG, "close: code: '$code', reason '$reason', remote: '$remote'.")
+            log.info("close: code: '$code', reason '$reason', remote: '$remote'.")
         }
 
         override fun onError(ex: Exception) {
             val sw = StringWriter()
             ex.printStackTrace(PrintWriter(sw))
-            Log.e(TAG, "error: $sw")
+            log.info("error: $sw")
         }
     }
 
     fun processAlarm(message: StreamMessage) {
         val alarm = message.deserializePayload<org.opennms.integration.api.v1.model.Alarm>()
-        Log.i(TAG, "Processing alarm ${alarm.reductionKey}")
+        log.info("Processing alarm ${alarm.reductionKey}")
         consumers.forEach { c ->
             try {
                 if (alarm.isSituation) {
@@ -144,14 +144,14 @@ class WebSocketConsumerService : ConsumerService {
                     c.acceptAlarm(convertAlarm(alarm))
                 }
             } catch (er: Error) {
-                Log.e(TAG, "Consumer unable to process alarm ${alarm.reductionKey} : $er")
+                log.warn("Consumer unable to process alarm ${alarm.reductionKey} : $er")
             }
         }
     }
 
     fun processAlarmDelete(message: StreamMessage) {
         val alarm = message.deserializePayload<AlarmDelete>()
-        Log.i(TAG, "Processing alarm deletion ${alarm.reductionKey}")
+        log.info("Processing alarm deletion ${alarm.reductionKey}")
         consumers.forEach { c ->
             try {
                 if (alarm.isSituation) {
@@ -160,23 +160,23 @@ class WebSocketConsumerService : ConsumerService {
                     c.acceptDeletedAlarm(alarm.reductionKey)
                 }
             } catch (er: Error) {
-                Log.e(TAG, "Consumer unable to process alarm delete ${alarm.reductionKey} : $er")
+                log.info("Consumer unable to process alarm delete ${alarm.reductionKey} : $er")
             }
         }
     }
 
     fun processEdge(message: StreamMessage) {
         val edge = message.deserializePayload<TopologyEdge>()
-        Log.i(TAG, "Processing edge ${edge.id}")
+        log.info("Processing edge ${edge.id}")
         val ve = convertTopologyEdge(edge)
 
         consumers.forEach { consumer ->
             try {
                 if (edges.containsKey(ve.edge.id)) {
-                    Log.d(TAG, "Update to edge ${ve.edge.id}")
+                    log.debug("Update to edge ${ve.edge.id}")
                     // TODO: is this supported?
                 } else {
-                    Log.d(TAG, "New edge ${ve.edge.id}")
+                    log.debug("New edge ${ve.edge.id}")
                     edges.put(ve.edge.id, ve.edge)
                     if (!vertices.containsKey(ve.vertices.src.id)) {
                         vertices.put(ve.vertices.src.id, ve.vertices.src)
@@ -187,44 +187,44 @@ class WebSocketConsumerService : ConsumerService {
                     consumer.acceptEdge(ve.edge)
                 }
             } catch (er : Error) {
-                Log.e(TAG, "Consumer unable to process edge ${edge.id} : $er")
+                log.warn("Consumer unable to process edge ${edge.id} : $er")
             }
         }
     }
 
     fun processEdgeDelete(message: StreamMessage) {
         val edge = message.deserializePayload<TopologyEdge>()
-        Log.i(TAG, "Processing edge delete ${edge.id}")
+        log.info("Processing edge delete ${edge.id}")
 
         consumers.forEach { consumer ->
             try {
                 if (!edges.containsKey(edge.id)) {
-                    Log.d(TAG, "Edge ${edge.id} does not exist")
+                    log.debug("Edge ${edge.id} does not exist")
                 } else {
-                    Log.i(TAG, "Deleting edge ${edge.id}")
+                    log.info("Deleting edge ${edge.id}")
                     edges.remove(edge.id)
                     consumer.acceptDeletedEdge(edge.id)
                 }
             } catch (er : Error) {
-                Log.e(TAG, "Consumer unable to process edge delete ${edge.id} : $er")
+                log.warn("Consumer unable to process edge delete ${edge.id} : $er")
             }
         }
     }
 
     fun processEvent(message: StreamMessage) {
         val event = message.deserializePayload<InMemoryEvent>()
-        Log.i(TAG, "Processing event ${event.uei}")
+        log.info("Processing event ${event.uei}")
         consumers.forEach {
             try {
                 it.acceptEvent(convertEvent(event))
             } catch (e: Error) {
-                Log.e(TAG, "Consumer unable to process event ${event.uei} : $e")
+                log.warn("Consumer unable to process event ${event.uei} : $e")
             }
         }
     }
 
     fun processTopology(message: StreamMessage) {
-        Log.i(TAG, "Processing topology")
+        log.info("Processing topology")
         val topology = message.deserializePayload<Topology>()
 
         edges.clear()
@@ -280,7 +280,7 @@ class WebSocketConsumerService : ConsumerService {
             initialSituations.addAll(situations)
         }
 
-        Log.i(TAG, "Graph contains ${graph.vertexCount} vertices " +
+        log.info("Graph contains ${graph.vertexCount} vertices " +
                 "and ${graph.edgeCount} edges. There are ${alarms?.size} alarms " +
                 "and situations ${situations?.size}")
 
@@ -288,27 +288,27 @@ class WebSocketConsumerService : ConsumerService {
             try {
                 it.accept(graph, initialAlarms, initialSituations)
             } catch (e: Error) {
-                Log.e(TAG, "Consumer unable to process topology : $e")
+                log.warn("Consumer unable to process topology : $e")
             }
         }
     }
 
     fun processNode(message: StreamMessage) {
         val node = message.deserializePayload<Node>()
-        Log.i(TAG, "Processing node ${node.id}")
+        log.info("Processing node ${node.id}")
         val convNode = convertNode(node)
         consumers.forEach {
             try {
                 if (vertices.containsKey(convNode.id)) {
-                    Log.d(TAG, "Update to node ${convNode.id}")
+                    log.debug("Update to node ${convNode.id}")
                     // TODO: is this supported?
                 } else {
-                    Log.d(TAG, "New vertex ${convNode.id}")
+                    log.debug("New vertex ${convNode.id}")
                     vertices.put(convNode.id, convNode)
                     it.acceptVertex(convNode)
                 }
             } catch (e: Error) {
-                Log.e(TAG, "Consumer unable to process node ${node.id} : $e")
+                log.warn("Consumer unable to process node ${node.id} : $e")
             }
         }
     }
@@ -412,16 +412,14 @@ class WebSocketConsumerService : ConsumerService {
 
     data class VertexPair(val src: Vertex, val dst: Vertex)
 
-
-    fun convertAlarm(alarm: org.opennms.integration.api.v1.model.Alarm) : Alarm {
-        return object : Alarm {
+    fun convertAlarm(alarm: Alarm) = object : org.opennms.oia.streaming.client.api.model.Alarm {
 
             override fun getReductionKey(): String {
                 return alarm.reductionKey
             }
 
-            override fun getSeverity(): Alarm.Severity {
-                return Alarm.Severity.valueOf(
+            override fun getSeverity(): org.opennms.oia.streaming.client.api.model.Alarm.Severity {
+                return org.opennms.oia.streaming.client.api.model.Alarm.Severity.valueOf(
                     alarm.severity.name
                 )
             }
@@ -438,10 +436,9 @@ class WebSocketConsumerService : ConsumerService {
                 return alarm.node.id.toString()
             }
         }
-    }
 
-    fun convertEvent(event: InMemoryEvent) : org.opennms.arnet.api.model.Event {
-        return object : org.opennms.arnet.api.model.Event {
+    fun convertEvent(event: InMemoryEvent) : org.opennms.oia.streaming.client.api.model.Event {
+        return object : org.opennms.oia.streaming.client.api.model.Event {
             override fun getUEI(): String {
                 return event.uei
             }
@@ -462,14 +459,14 @@ class WebSocketConsumerService : ConsumerService {
         }
     }
 
-    fun convertSituation(situation: org.opennms.integration.api.v1.model.Alarm) : Situation {
-        return object : Situation {
+    fun convertSituation(situation: Alarm) : org.opennms.oia.streaming.client.api.model.Situation {
+        return object : org.opennms.oia.streaming.client.api.model.Situation {
             override fun getReductionKey(): String {
                 return situation.reductionKey
             }
 
-            override fun getSeverity(): Alarm.Severity {
-                return Alarm.Severity.valueOf(
+            override fun getSeverity(): org.opennms.oia.streaming.client.api.model.Alarm.Severity {
+                return org.opennms.oia.streaming.client.api.model.Alarm.Severity.valueOf(
                     situation.severity.name)
             }
 
@@ -485,7 +482,7 @@ class WebSocketConsumerService : ConsumerService {
                 return situation.node.id.toString()
             }
 
-            override fun getRelatedAlarms(): MutableSet<Alarm> {
+            override fun getRelatedAlarms(): MutableSet<org.opennms.oia.streaming.client.api.model.Alarm> {
                 return situation.relatedAlarms.map { a -> convertAlarm(a) }.toMutableSet()
             }
         }
@@ -519,10 +516,8 @@ class WebSocketConsumerService : ConsumerService {
     fun numVertices() : Int {
         return vertices.size
     }
-
-    companion object {
-
-        private val TAG = "WebSocketConsumerService"
+    
+    private companion object {
 
         /**
          * The WebSocket server IP and port.

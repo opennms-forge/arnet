@@ -1,6 +1,4 @@
-package org.opennms.arnet.api;
-
-import org.opennms.arnet.app.domain.NetworkManager;
+package org.opennms.oia.streaming.client.api;
 
 public interface ConsumerService {
 

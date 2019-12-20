@@ -4,7 +4,6 @@ import com.google.ar.sceneform.Node;
 import com.google.ar.sceneform.math.Quaternion;
 import com.google.ar.sceneform.math.Vector3;
 
-import org.opennms.arnet.api.model.Vertex;
 import org.opennms.arnet.app.domain.InventoryEdge;
 
 import java.util.Objects;

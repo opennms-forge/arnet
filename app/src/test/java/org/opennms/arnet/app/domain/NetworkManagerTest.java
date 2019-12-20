@@ -6,7 +6,6 @@ import org.hamcrest.Matcher;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
-import org.opennms.arnet.api.model.Alarm;
 import org.opennms.arnet.app.mock.MockConsumerService;
 
 import java.util.List;

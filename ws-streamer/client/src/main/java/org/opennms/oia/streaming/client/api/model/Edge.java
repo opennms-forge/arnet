@@ -1,4 +1,4 @@
-package org.opennms.arnet.api.model;
+package org.opennms.oia.streaming.client.api.model;
 
 public interface Edge {
 

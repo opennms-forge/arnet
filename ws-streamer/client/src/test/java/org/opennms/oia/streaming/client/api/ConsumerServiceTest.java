@@ -1,14 +1,9 @@
-package org.opennms.arnet;
+package org.opennms.oia.streaming.client.api;
 
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
-import org.opennms.arnet.api.Consumer;
-import org.opennms.arnet.api.model.Alarm;
-import org.opennms.arnet.api.model.Edge;
-import org.opennms.arnet.api.model.Situation;
-import org.opennms.arnet.api.model.Vertex;
 import org.opennms.integration.api.v1.config.events.AlarmType;
 import org.opennms.integration.api.v1.model.DatabaseEvent;
 import org.opennms.integration.api.v1.model.IpInterface;
@@ -23,6 +18,11 @@ import org.opennms.integration.api.v1.model.TopologyPort;
 import org.opennms.integration.api.v1.model.TopologyProtocol;
 import org.opennms.integration.api.v1.model.TopologySegment;
 import org.opennms.oia.streaming.model.AlarmDelete;
+import org.opennms.oia.streaming.client.WebSocketConsumerService;
+import org.opennms.oia.streaming.client.api.model.Alarm;
+import org.opennms.oia.streaming.client.api.model.Edge;
+import org.opennms.oia.streaming.client.api.model.Situation;
+import org.opennms.oia.streaming.client.api.model.Vertex;
 import org.opennms.oia.streaming.model.MessageType;
 import org.opennms.oia.streaming.model.StreamMessage;
 import org.opennms.oia.streaming.model.Topology;
