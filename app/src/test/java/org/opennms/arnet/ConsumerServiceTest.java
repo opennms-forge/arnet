@@ -1,5 +1,6 @@
 package org.opennms.arnet;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -21,6 +22,7 @@ import org.opennms.integration.api.v1.model.TopologyEdge;
 import org.opennms.integration.api.v1.model.TopologyPort;
 import org.opennms.integration.api.v1.model.TopologyProtocol;
 import org.opennms.integration.api.v1.model.TopologySegment;
+import org.opennms.oia.streaming.model.AlarmDelete;
 import org.opennms.oia.streaming.model.MessageType;
 import org.opennms.oia.streaming.model.StreamMessage;
 import org.opennms.oia.streaming.model.Topology;
@@ -37,23 +39,28 @@ import edu.uci.ics.jung.graph.Graph;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.Assert.assertEquals;
+import static org.mockito.Matchers.anyObject;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 public class ConsumerServiceTest {
 
-    private WebSocketConsumerService wsConsumer = new WebSocketConsumerService();
+    private WebSocketConsumerService wsConsumer;
 
     private Consumer consumer = Mockito.mock(Consumer.class);
 
+    @Before
+    public void setUp() {
+        wsConsumer = new WebSocketConsumerService();
+    }
+
     @Test
     public void testTopology() {
-        wsConsumer.accept(consumer);
-
         ArgumentCaptor<Graph<Vertex, Edge>> graphCap = ArgumentCaptor.forClass((Class) Graph.class);
         ArgumentCaptor<List<Alarm>> alarmCap = ArgumentCaptor.forClass((Class) List.class);
         ArgumentCaptor<List<Situation>> situationCap = ArgumentCaptor.forClass((Class) List.class);
 
+        wsConsumer.addConsumer(consumer);
         wsConsumer.processTopology(generateTopology());
 
         verify(consumer, times(1)).accept(
@@ -70,6 +77,103 @@ public class ConsumerServiceTest {
         assertEquals(8, graph.getVertexCount());
 
         wsConsumer.dismiss(consumer);
+    }
+
+    @Test
+    public void testAlarm() {
+        ArgumentCaptor<Alarm> alarmCap = ArgumentCaptor.forClass((Class) Graph.class);
+
+        wsConsumer.addConsumer(consumer);
+
+        org.opennms.integration.api.v1.model.Alarm alarm =
+                generateAlarm(101, "reduc-key-101", false);
+
+        wsConsumer.processAlarm(new StreamMessage(MessageType.Alarm, alarm));
+
+        verify(consumer, times(1)).acceptAlarm(alarmCap.capture());
+
+        assertEquals(alarm.getReductionKey(), alarmCap.getValue().getReductionKey());
+    }
+
+    @Test
+    public void testAlarmDelete() {
+        ArgumentCaptor<String> alarmCap = ArgumentCaptor.forClass((Class) String.class);
+
+        wsConsumer.addConsumer(consumer);
+
+        org.opennms.integration.api.v1.model.Alarm alarm =
+                generateAlarm(101, "reduc-key-1", false);
+
+        wsConsumer.processAlarmDelete(new StreamMessage(MessageType.AlarmDelete,
+                new AlarmDelete(alarm.getReductionKey(), alarm.isSituation())));
+
+        verify(consumer, times(1)).acceptDeletedAlarm(alarmCap.capture());
+
+        assertEquals(alarm.getReductionKey(), alarmCap.getValue());
+    }
+
+    @Test
+    public void testNodeAdd() {
+        ArgumentCaptor<Vertex> vertexCap = ArgumentCaptor.forClass((Class) Vertex.class);
+
+        wsConsumer.processTopology(generateTopology());
+        wsConsumer.addConsumer(consumer);
+
+        Node existingNode = generateNode(10, "node-10-label");
+        Node newNode = generateNode(50, "node-50-label");
+
+        wsConsumer.processNode(new StreamMessage(MessageType.Node, existingNode));
+        wsConsumer.processNode(new StreamMessage(MessageType.Node, newNode));
+
+        // Ensure that existing nodes don't result invoking the consumer... only new ones should.
+        verify(consumer, times(1)).acceptVertex(vertexCap.capture());
+
+        assertEquals(newNode.getId().toString(), vertexCap.getValue().getId());
+    }
+
+    @Test
+    public void testEdgeAdd() {
+        ArgumentCaptor<Edge> edgeCap = ArgumentCaptor.forClass((Class) Edge.class);
+
+        wsConsumer.processTopology(generateTopology());
+        wsConsumer.addConsumer(consumer);
+
+        // Add edge that contains one vertex already in graph and one that is new.
+        TopologyEdge edge = generateTopologyEdge("edge-6",
+                generateNode(25, "node-25-label"), TopologyEdge.EndpointType.NODE,
+                generatePort(26), TopologyEdge.EndpointType.PORT);
+
+        wsConsumer.processEdge(new StreamMessage(MessageType.Edge, edge));
+
+        verify(consumer, times(1)).acceptEdge(edgeCap.capture());
+
+        assertEquals(edge.getId() + "-" + edge.getProtocol(), edgeCap.getValue().getId());
+        assertEquals("25", edgeCap.getValue().getSourceVertex().getId());
+        assertEquals("26", edgeCap.getValue().getTargetVertex().getId());
+
+        assertEquals(6, wsConsumer.numEdges());
+        assertEquals(9, wsConsumer.numVertices());
+    }
+
+    @Test
+    public void testEdgeAddDuplicate() {
+        ArgumentCaptor<Edge> edgeCap = ArgumentCaptor.forClass((Class) Edge.class);
+
+        wsConsumer.processTopology(generateTopology());
+        wsConsumer.addConsumer(consumer);
+
+        // Add edge that is a duplicate.
+        TopologyEdge edge = generateTopologyEdge("edge-5",
+                generatePort(24), TopologyEdge.EndpointType.PORT,
+                generateNode(25, "node-25-label"), TopologyEdge.EndpointType.NODE);
+
+        wsConsumer.processEdge(new StreamMessage(MessageType.Edge, edge));
+
+        verify(consumer, times(0)).acceptEdge(
+                anyObject());
+
+        assertEquals(5, wsConsumer.numEdges());
+        assertEquals(8, wsConsumer.numVertices());
     }
 
     private StreamMessage generateTopology() {

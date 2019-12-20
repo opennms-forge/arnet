@@ -10,7 +10,9 @@ import edu.uci.ics.jung.graph.SparseMultigraph
 import org.java_websocket.handshake.ServerHandshake
 import org.opennms.arnet.api.Consumer
 import org.opennms.arnet.api.ConsumerService
+import org.opennms.arnet.api.model.Alarm
 import org.opennms.arnet.api.model.Edge
+import org.opennms.arnet.api.model.Situation
 import org.opennms.arnet.api.model.Vertex
 import org.opennms.integration.api.v1.model.*
 import org.opennms.oia.streaming.model.*
@@ -22,6 +24,7 @@ import java.nio.ByteBuffer
 import java.util.*
 
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 class WebSocketConsumerService : ConsumerService {
@@ -36,9 +39,29 @@ class WebSocketConsumerService : ConsumerService {
 
     private val edges = mutableMapOf<String, Edge>()
 
+    private var graph: Graph<Vertex, Edge> = SparseMultigraph()
+
+    private val initialAlarms = mutableListOf<Alarm>()
+
+    private val initialSituations = mutableListOf<Situation>()
+
+    private val initLatch = CountDownLatch(1)
+
     override fun accept(consumer: Consumer) {
         Log.i(TAG, "Adding consumer.")
         consumers.add(consumer)
+
+        // TODO: only supporting a single consumer
+        //  If multiple consumers were to be supported, the first consumer subscribes - with
+        //  subsequent consumers refreshing the topology. The server side would need to support
+        //  a topology refresh operation.
+
+        initLatch.await(1, TimeUnit.SECONDS)
+
+        if (client.isOpen) {
+            client.send(mapper.writeValueAsString(StreamRequest(
+                RequestAction.SUBSCRIBE/*, FILTER_CRITERIA*/)))
+        }
     }
 
     override fun dismiss(consumer: Consumer?) {
@@ -61,6 +84,8 @@ class WebSocketConsumerService : ConsumerService {
         } else {
             Log.e(TAG, "Not Connected!")
         }
+
+        initLatch.countDown()
     }
 
     override fun stop() {
@@ -77,7 +102,6 @@ class WebSocketConsumerService : ConsumerService {
 
         override fun onOpen(handshakedata: ServerHandshake) {
             Log.i(TAG, "open: status '${handshakedata.httpStatus}'")
-            send(mapper.writeValueAsString(StreamRequest(RequestAction.SUBSCRIBE/*, FILTER_CRITERIA*/)))
         }
 
         override fun onMessage(message: String) {
@@ -114,7 +138,7 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     fun processAlarm(message: StreamMessage) {
-        val alarm = message.deserializePayload<Alarm>()
+        val alarm = message.deserializePayload<org.opennms.integration.api.v1.model.Alarm>()
         Log.i(TAG, "Processing alarm ${alarm.reductionKey}")
         consumers.forEach { c ->
             try {
@@ -152,30 +176,18 @@ class WebSocketConsumerService : ConsumerService {
 
         consumers.forEach { consumer ->
             try {
-                if (vertices.containsKey(ve.vertices.src.id)) {
-                    Log.d(TAG, "Update to vertex ${ve.vertices.src.id}")
-                    // TODO: is this supported?
-                } else {
-                    Log.d(TAG, "New vertex ${ve.vertices.src.id}")
-                    vertices.put(ve.vertices.src.id, ve.vertices.src)
-                    consumer.acceptVertex(ve.vertices.src)
-                }
-
-                if (vertices.containsKey(ve.vertices.dst.id)) {
-                    Log.d(TAG, "Update to vertex ${ve.vertices.dst.id}")
-                    // TODO: is this supported?
-                } else {
-                    Log.d(TAG, "New vertex ${ve.vertices.dst.id}")
-                    vertices.put(ve.vertices.dst.id, ve.vertices.dst)
-                    consumer.acceptVertex(ve.vertices.dst)
-                }
-
                 if (edges.containsKey(ve.edge.id)) {
                     Log.d(TAG, "Update to edge ${ve.edge.id}")
                     // TODO: is this supported?
                 } else {
                     Log.d(TAG, "New edge ${ve.edge.id}")
                     edges.put(ve.edge.id, ve.edge)
+                    if (!vertices.containsKey(ve.vertices.src.id)) {
+                        vertices.put(ve.vertices.src.id, ve.vertices.src)
+                    }
+                    if (!vertices.containsKey(ve.vertices.dst.id)) {
+                        vertices.put(ve.vertices.dst.id, ve.vertices.dst)
+                    }
                     consumer.acceptEdge(ve.edge)
                 }
             } catch (er : Error) {
@@ -218,10 +230,12 @@ class WebSocketConsumerService : ConsumerService {
     fun processTopology(message: StreamMessage) {
         Log.i(TAG, "Processing topology")
         val topology = message.deserializePayload<Topology>()
-        val graph: Graph<Vertex, Edge> = SparseMultigraph()
 
         edges.clear()
         vertices.clear()
+        initialAlarms.clear()
+        initialSituations.clear()
+        graph = SparseMultigraph<Vertex, Edge>()
 
         // Handles node that appear directly in Topology
         val verticesNodes = topology.nodes
@@ -260,15 +274,23 @@ class WebSocketConsumerService : ConsumerService {
         // Add nodes and edges to graph
         edges.values.forEach { graph.addEdge(it, it.sourceVertex, it.targetVertex) }
 
+        val alarms = topology.alarms?.filter { !it.isSituation }?.map { convertAlarm(it) }
+        if (alarms != null) {
+            initialAlarms.addAll(alarms)
+        }
+
+        val situations = topology.alarms?.filter { it.isSituation }?.map { convertSituation(it) }
+        if (situations != null) {
+            initialSituations.addAll(situations)
+        }
+
         Log.i(TAG, "Graph contains ${graph.vertexCount} vertices " +
-                "and ${graph.edgeCount} edges. There are ${topology.alarms?.size} alarms " +
-                "and situations")
+                "and ${graph.edgeCount} edges. There are ${alarms?.size} alarms " +
+                "and situations ${situations?.size}")
 
         consumers.forEach {
             try {
-                it.accept(graph,
-                    topology.alarms?.filter { !it.isSituation }?.map { convertAlarm(it) },
-                    topology.alarms?.filter { it.isSituation }?.map { convertSituation(it) })
+                it.accept(graph, initialAlarms, initialSituations)
             } catch (e: Error) {
                 Log.e(TAG, "Consumer unable to process topology : $e")
             }
@@ -395,15 +417,15 @@ class WebSocketConsumerService : ConsumerService {
     data class VertexPair(val src: Vertex, val dst: Vertex)
 
 
-    fun convertAlarm(alarm: Alarm) : org.opennms.arnet.api.model.Alarm {
-        return object : org.opennms.arnet.api.model.Alarm {
+    fun convertAlarm(alarm: org.opennms.integration.api.v1.model.Alarm) : Alarm {
+        return object : Alarm {
 
             override fun getReductionKey(): String {
                 return alarm.reductionKey
             }
 
-            override fun getSeverity(): org.opennms.arnet.api.model.Alarm.Severity {
-                return org.opennms.arnet.api.model.Alarm.Severity.valueOf(
+            override fun getSeverity(): Alarm.Severity {
+                return Alarm.Severity.valueOf(
                     alarm.severity.name
                 )
             }
@@ -444,14 +466,14 @@ class WebSocketConsumerService : ConsumerService {
         }
     }
 
-    fun convertSituation(situation: Alarm) : org.opennms.arnet.api.model.Situation {
-        return object : org.opennms.arnet.api.model.Situation {
+    fun convertSituation(situation: org.opennms.integration.api.v1.model.Alarm) : Situation {
+        return object : Situation {
             override fun getReductionKey(): String {
                 return situation.reductionKey
             }
 
-            override fun getSeverity(): org.opennms.arnet.api.model.Alarm.Severity {
-                return org.opennms.arnet.api.model.Alarm.Severity.valueOf(
+            override fun getSeverity(): Alarm.Severity {
+                return Alarm.Severity.valueOf(
                     situation.severity.name)
             }
 
@@ -467,7 +489,7 @@ class WebSocketConsumerService : ConsumerService {
                 return situation.node.id.toString()
             }
 
-            override fun getRelatedAlarms(): MutableSet<org.opennms.arnet.api.model.Alarm> {
+            override fun getRelatedAlarms(): MutableSet<Alarm> {
                 return situation.relatedAlarms.map { a -> convertAlarm(a) }.toMutableSet()
             }
         }
@@ -485,6 +507,21 @@ class WebSocketConsumerService : ConsumerService {
     fun convertSegment(segment: TopologySegment) : Vertex {
         // TODO: can "label" be generated?
         return VertexImpl(id = segment.id.toString(), label = "", type = Vertex.Type.Segment)
+    }
+
+    // For unit testing...
+    fun addConsumer(consumer: Consumer) {
+        consumers.add(consumer)
+    }
+
+    // For unit testing...
+    fun numEdges() : Int {
+        return edges.size
+    }
+
+    // For unit testing...
+    fun numVertices() : Int {
+        return vertices.size
     }
 
     companion object {
