@@ -24,8 +24,6 @@ import java.nio.ByteBuffer
 import java.util.*
 
 import java.util.concurrent.CopyOnWriteArrayList
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 class WebSocketConsumerService : ConsumerService {
 
@@ -45,8 +43,6 @@ class WebSocketConsumerService : ConsumerService {
 
     private val initialSituations = mutableListOf<Situation>()
 
-    private val initLatch = CountDownLatch(1)
-
     override fun accept(consumer: Consumer) {
         Log.i(TAG, "Adding consumer.")
         consumers.add(consumer)
@@ -56,13 +52,15 @@ class WebSocketConsumerService : ConsumerService {
         //  subsequent consumers refreshing the topology. The server side would need to support
         //  a topology refresh operation.
 
-        initLatch.await(1, TimeUnit.SECONDS)
-
         if (client.isOpen) {
-            client.send(mapper.writeValueAsString(StreamRequest(
-                RequestAction.SUBSCRIBE/*, FILTER_CRITERIA*/)))
+            if (consumers.size == 1) {
+                client.send(mapper.writeValueAsString(StreamRequest(
+                    RequestAction.SUBSCRIBE/*, FILTER_CRITERIA*/)))
+            } else {
+                consumer.accept(graph, initialAlarms, initialSituations)
+            }
         }
-    }
+     }
 
     override fun dismiss(consumer: Consumer?) {
         Log.i(TAG, "Removing consumer.")
@@ -70,26 +68,19 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     override fun start() {
-        Log.i(TAG, "Attempting to connect...")
+        Log.i(TAG, "Starting...")
 
-        // TODO: this would be better with a retry mechanism...
+        Log.i(TAG, "Attempting to connect.")
         try {
-            client.connectBlocking(1, TimeUnit.SECONDS)
+            // Initiates the web socket connection; does not block.
+            client.connect()
         } catch (e: InterruptedException) {
             Log.e(TAG, "Interrupted while attempting to connect")
         }
-
-        if (client.isOpen) {
-            Log.i(TAG, "Connected.")
-        } else {
-            Log.e(TAG, "Not Connected!")
-        }
-
-        initLatch.countDown()
     }
 
     override fun stop() {
-        Log.i(TAG, "Disconnecting...")
+        Log.i(TAG, "Stopping...")
 
         if (client.isOpen) {
             Log.i(TAG, "Closing client.")
@@ -102,6 +93,11 @@ class WebSocketConsumerService : ConsumerService {
 
         override fun onOpen(handshakedata: ServerHandshake) {
             Log.i(TAG, "open: status '${handshakedata.httpStatus}'")
+
+            if (consumers.isNotEmpty()) {
+                client.send(mapper.writeValueAsString(StreamRequest(
+                    RequestAction.SUBSCRIBE/*, FILTER_CRITERIA*/)))
+            }
         }
 
         override fun onMessage(message: String) {
