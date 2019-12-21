@@ -11,6 +11,7 @@ import org.opennms.integration.api.v1.model.*
 import org.opennms.oia.streaming.client.api.Consumer
 import org.opennms.oia.streaming.client.api.ConsumerService
 import org.opennms.oia.streaming.client.api.model.Edge
+import org.opennms.oia.streaming.client.api.model.Situation
 import org.opennms.oia.streaming.client.api.model.Vertex
 import org.opennms.oia.streaming.model.*
 import org.slf4j.LoggerFactory
@@ -25,7 +26,7 @@ import java.util.concurrent.CopyOnWriteArrayList
 
 class WebSocketConsumerService : ConsumerService {
 
-    private var client: WebSocketClient = WebSocketClient(URI(WEB_SOCKET_SERVER))
+    private val client: WebSocketClient = WebSocketClient(URI(WEB_SOCKET_SERVER))
 
     private val consumers = CopyOnWriteArrayList<Consumer>()
 
@@ -34,12 +35,13 @@ class WebSocketConsumerService : ConsumerService {
     private val vertices = mutableMapOf<String, Vertex>()
 
     private val edges = mutableMapOf<String, Edge>()
-    
+
+    // TODO: Need to get this logging in android
     private val log = LoggerFactory.getLogger(WebSocketConsumerService::class.java)
 
     private var graph: Graph<Vertex, Edge> = SparseMultigraph()
 
-    private val initialAlarms = mutableListOf<Alarm>()
+    private val initialAlarms = mutableListOf<org.opennms.oia.streaming.client.api.model.Alarm>()
 
     private val initialSituations = mutableListOf<Situation>()
 
@@ -134,7 +136,7 @@ class WebSocketConsumerService : ConsumerService {
     }
 
     fun processAlarm(message: StreamMessage) {
-        val alarm = message.deserializePayload<org.opennms.integration.api.v1.model.Alarm>()
+        val alarm = message.deserializePayload<Alarm>()
         log.info("Processing alarm ${alarm.reductionKey}")
         consumers.forEach { c ->
             try {
@@ -413,7 +415,6 @@ class WebSocketConsumerService : ConsumerService {
     data class VertexPair(val src: Vertex, val dst: Vertex)
 
     fun convertAlarm(alarm: Alarm) = object : org.opennms.oia.streaming.client.api.model.Alarm {
-
             override fun getReductionKey(): String {
                 return alarm.reductionKey
             }
@@ -437,54 +438,51 @@ class WebSocketConsumerService : ConsumerService {
             }
         }
 
-    fun convertEvent(event: InMemoryEvent) : org.opennms.oia.streaming.client.api.model.Event {
-        return object : org.opennms.oia.streaming.client.api.model.Event {
-            override fun getUEI(): String {
-                return event.uei
-            }
+    fun convertEvent(event: InMemoryEvent) = object : org.opennms.oia.streaming.client.api.model.Event {
+        override fun getUEI(): String {
+            return event.uei
+        }
 
-            override fun getDescription(): String {
-                // TODO: can this be generated?
-                return ""
-            }
+        override fun getDescription(): String {
+            // TODO: can this be generated?
+            return ""
+        }
 
-            override fun getTime(): Date {
-                // TODO: can this be generated?
-                return Date()
-            }
+        override fun getTime(): Date {
+            // TODO: can this be generated?
+            return Date()
+        }
 
-            override fun getVertexId(): String {
-                return event.nodeId.toString()
-            }
+        override fun getVertexId(): String {
+            return event.nodeId.toString()
         }
     }
 
-    fun convertSituation(situation: Alarm) : org.opennms.oia.streaming.client.api.model.Situation {
-        return object : org.opennms.oia.streaming.client.api.model.Situation {
-            override fun getReductionKey(): String {
-                return situation.reductionKey
-            }
+    fun convertSituation(situation: Alarm) = object : Situation {
+        override fun getReductionKey(): String {
+            return situation.reductionKey
+        }
 
-            override fun getSeverity(): org.opennms.oia.streaming.client.api.model.Alarm.Severity {
-                return org.opennms.oia.streaming.client.api.model.Alarm.Severity.valueOf(
-                    situation.severity.name)
-            }
+        override fun getSeverity(): org.opennms.oia.streaming.client.api.model.Alarm.Severity {
+            return org.opennms.oia.streaming.client.api.model.Alarm.Severity.valueOf(
+                situation.severity.name
+            )
+        }
 
-            override fun getDescription(): String {
-                return situation.description
-            }
+        override fun getDescription(): String {
+            return situation.description
+        }
 
-            override fun getLastUpdated(): Date {
-                return situation.lastEventTime
-            }
+        override fun getLastUpdated(): Date {
+            return situation.lastEventTime
+        }
 
-            override fun getVertexId(): String {
-                return situation.node.id.toString()
-            }
+        override fun getVertexId(): String {
+            return situation.node.id.toString()
+        }
 
-            override fun getRelatedAlarms(): MutableSet<org.opennms.oia.streaming.client.api.model.Alarm> {
-                return situation.relatedAlarms.map { a -> convertAlarm(a) }.toMutableSet()
-            }
+        override fun getRelatedAlarms(): MutableSet<org.opennms.oia.streaming.client.api.model.Alarm> {
+            return situation.relatedAlarms.map { a -> convertAlarm(a) }.toMutableSet()
         }
     }
 

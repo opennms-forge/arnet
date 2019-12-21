@@ -15,12 +15,9 @@ import com.google.ar.sceneform.FrameTime
 import com.google.ar.sceneform.SceneView
 import com.google.ar.sceneform.math.Vector3
 import com.google.ar.sceneform.ux.ArFragment
-import com.google.common.util.concurrent.AtomicDouble
-import org.opennms.arnet.WebSocketConsumerService
 import org.opennms.arnet.app.mock.MockConsumerService
 import org.opennms.arnet.app.scene.NetworkNode
 import org.opennms.arnet.app.scene.RenderableRegistry
-import org.opennms.oia.streaming.client.api.ConsumerService
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 import kotlin.math.min
