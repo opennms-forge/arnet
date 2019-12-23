@@ -23,10 +23,11 @@ import java.nio.ByteBuffer
 import java.util.*
 
 import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.atomic.AtomicBoolean
 
-class WebSocketConsumerService : ConsumerService {
+class WebSocketConsumerService(websocketUri: String) : ConsumerService {
 
-    private val client: WebSocketClient = WebSocketClient(URI(WEB_SOCKET_SERVER))
+    private val client: WebSocketClient = WebSocketClient(URI(websocketUri))
 
     private val consumers = CopyOnWriteArrayList<Consumer>()
 
@@ -44,6 +45,8 @@ class WebSocketConsumerService : ConsumerService {
     private val initialAlarms = mutableListOf<org.opennms.oia.streaming.client.api.model.Alarm>()
 
     private val initialSituations = mutableListOf<Situation>()
+    
+    private val initialized = AtomicBoolean(false)
 
     override fun accept(consumer: Consumer) {
         log.info("Adding consumer.")
@@ -54,13 +57,8 @@ class WebSocketConsumerService : ConsumerService {
         //  subsequent consumers refreshing the topology. The server side would need to support
         //  a topology refresh operation.
 
-        if (client.isOpen) {
-            if (consumers.size == 1) {
-                client.send(mapper.writeValueAsString(StreamRequest(
-                    RequestAction.SUBSCRIBE/*, FILTER_CRITERIA*/)))
-            } else {
-                consumer.accept(graph, initialAlarms, initialSituations)
-            }
+        if (initialized.get()) {
+            consumer.accept(graph, initialAlarms, initialSituations)
         }
      }
 
@@ -96,9 +94,8 @@ class WebSocketConsumerService : ConsumerService {
         override fun onOpen(handshakedata: ServerHandshake) {
             log.info("open: status '${handshakedata.httpStatus}'")
 
-            if (consumers.isNotEmpty()) {
-                client.send(mapper.writeValueAsString(StreamRequest(
-                    RequestAction.SUBSCRIBE/*, FILTER_CRITERIA*/)))
+           if (consumers.isNotEmpty()) {
+                client.send(mapper.writeValueAsString(subscribeRequest()))
             }
         }
 
@@ -293,6 +290,8 @@ class WebSocketConsumerService : ConsumerService {
                 log.warn("Consumer unable to process topology : $e")
             }
         }
+        
+        initialized.set(true)
     }
 
     fun processNode(message: StreamMessage) {
@@ -516,16 +515,6 @@ class WebSocketConsumerService : ConsumerService {
     }
     
     private companion object {
-
-        /**
-         * The WebSocket server IP and port.
-         * Remember to update this accordingly!
-         */
-//        private val WEB_SOCKET_SERVER = "ws://172.20.50.148:8081"
-
-        // Matt's system...
-        private val WEB_SOCKET_SERVER = "ws://172.20.50.109:8080"
-
         /**
          * The (optional) filter criteria used for subscribing to ARNet streaming service.
          * Location(s) can be specified in the filter criteria.
