@@ -51,7 +51,7 @@ public class ConsumerServiceTest {
 
     @Before
     public void setUp() {
-        wsConsumer = new WebSocketConsumerService();
+        wsConsumer = new WebSocketConsumerService("ws://localhost:8080");
     }
 
     @Test

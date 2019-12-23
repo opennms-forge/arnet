@@ -23,7 +23,7 @@ public class WebSocketConsumerServiceTest implements Consumer {
     @Test
     public void canConsume() {
         LOG.debug("Starting consumer.");
-        WebSocketConsumerService wsSvc = new WebSocketConsumerService();
+        WebSocketConsumerService wsSvc = new WebSocketConsumerService("ws://localhost:8080");
         wsSvc.start();
         wsSvc.accept(this);
         await().until(() -> gotVertex);

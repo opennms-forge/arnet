@@ -79,7 +79,7 @@
         </dependency>
         <dependency>
             <groupId>org.opennms.integration.api.util</groupId>
-            <artifactId>deserializer</artifactId>
+            <artifactId>oia-serialization</artifactId>
             <version>1.0-SNAPSHOT</version>
         </dependency>
         <dependency>

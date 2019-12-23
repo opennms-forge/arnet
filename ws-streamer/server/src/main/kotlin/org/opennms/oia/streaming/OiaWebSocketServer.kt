@@ -1,10 +1,12 @@
 package org.opennms.oia.streaming
 
+import com.fasterxml.jackson.databind.module.SimpleModule
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
 import org.java_websocket.WebSocket
 import org.java_websocket.handshake.ClientHandshake
 import org.java_websocket.server.WebSocketServer
+import org.opennms.integration.api.serializer.TopologyEdgeSerializer
 import org.opennms.integration.api.v1.alarms.AlarmLifecycleListener
 import org.opennms.integration.api.v1.dao.AlarmDao
 import org.opennms.integration.api.v1.dao.EdgeDao
@@ -31,7 +33,12 @@ class OiaWebSocketServer(
 
     private val log = LoggerFactory.getLogger(OiaWebSocketServer::class.java)
 
-    private val mapper = jacksonObjectMapper()
+    private val mapper = jacksonObjectMapper().apply { 
+        val module = SimpleModule()
+        module.addSerializer(TopologyEdge::class.java, TopologyEdgeSerializer())
+        registerModule(module)
+    }
+
     private val subscribers = ConcurrentHashMap<WebSocket, FilterCriteria>()
     private val nodeIdsBySession = ConcurrentHashMap<WebSocket, MutableSet<Int>>()
 
@@ -77,7 +84,8 @@ class OiaWebSocketServer(
             .filter { filterEdge(it, filterCriteria) }
             .let { if (it.isNotEmpty()) it.toSet() else null }
 
-        return mapper.writeValueAsBytes(topologyMessage(Topology(alarms = alarms, nodes = nodes, edges = edges)))
+        val topology = topologyMessage(Topology(alarms = alarms, nodes = nodes, edges = edges))        
+        return mapper.writeValueAsBytes(topology)
     }
 
     private fun generateAlarmReceivers(alarm: Alarm): Set<WebSocket>? {
