@@ -43,6 +43,7 @@ import org.opennms.integration.api.v1.model.immutables.ImmutableNode;
 import org.opennms.integration.api.v1.model.immutables.ImmutableTopologyEdge;
 import org.opennms.oia.streaming.OiaWebSocketServer;
 import org.opennms.oia.streaming.client.WebSocketConsumerService;
+import org.opennms.oia.streaming.client.api.ConsumerService;
 import org.opennms.oia.streaming.client.api.model.Alarm;
 import org.opennms.oia.streaming.client.api.model.Edge;
 import org.opennms.oia.streaming.client.api.model.Situation;
@@ -50,10 +51,7 @@ import org.opennms.oia.streaming.client.api.model.Vertex;
 import org.springframework.util.SocketUtils;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -86,22 +84,24 @@ public class ClientServerTest {
             .setLabel(TEST_LABEL + "-z")
             .build();
 
-    private static final List<Node> initialNodes = List.of(initialNodeA, initialNodeZ);
+    private static final List<Node> initialNodes = Arrays.asList(initialNodeA, initialNodeZ);
 
-    private static final Set<org.opennms.integration.api.v1.model.Alarm> initialAlarms = Set.of(
-            ImmutableAlarm.newBuilder()
-                    .setId(1)
-                    .setReductionKey("alarm1")
-                    .setNode(initialNodeA)
-                    .build(),
-            ImmutableAlarm.newBuilder()
-                    .setId(2)
-                    .setReductionKey("alarm2")
-                    .setNode(initialNodeZ)
-                    .build()
+    private static final Set<org.opennms.integration.api.v1.model.Alarm> initialAlarms = new HashSet<>(
+            Arrays.asList(
+                    ImmutableAlarm.newBuilder()
+                            .setId(1)
+                            .setReductionKey("alarm1")
+                            .setNode(initialNodeA)
+                            .build(),
+                    ImmutableAlarm.newBuilder()
+                            .setId(2)
+                            .setReductionKey("alarm2")
+                            .setNode(initialNodeZ)
+                            .build()
+            )
     );
 
-    private static final Set<org.opennms.integration.api.v1.model.Alarm> initialSituations = Set.of(
+    private static final Set<org.opennms.integration.api.v1.model.Alarm> initialSituations = Collections.singleton(
             ImmutableAlarm.newBuilder()
                     .setId(3)
                     .setReductionKey("situation1")
@@ -109,7 +109,7 @@ public class ClientServerTest {
                     .build()
     );
 
-    private static final Set<TopologyEdge> initialEdges = Set.of(
+    private static final Set<TopologyEdge> initialEdges = Collections.singleton(
             ImmutableTopologyEdge.newBuilder()
                     .setId("a-z")
                     .setProtocol(TopologyProtocol.USERDEFINED)
@@ -120,7 +120,7 @@ public class ClientServerTest {
 
     @BeforeAll
     public static void setupMocks() {
-        var alarmsAndSituations = new ArrayList<org.opennms.integration.api.v1.model.Alarm>();
+        List<org.opennms.integration.api.v1.model.Alarm> alarmsAndSituations = new ArrayList<>();
         alarmsAndSituations.addAll(initialAlarms);
         alarmsAndSituations.addAll(initialSituations);
         when(mockedAlarmDao.getAlarms()).thenReturn(alarmsAndSituations);
@@ -131,19 +131,19 @@ public class ClientServerTest {
 
     @Test
     public void canReceiveInitialTopology() throws InterruptedException, IOException {
-        var port = SocketUtils.findAvailableTcpPort();
+        int port = SocketUtils.findAvailableTcpPort();
 
-        var server = new OiaWebSocketServer(port, mockedAlarmDao, mockedNodeDao, mockedEdgeDao,
+        OiaWebSocketServer server = new OiaWebSocketServer(port, mockedAlarmDao, mockedNodeDao, mockedEdgeDao,
                 mockedEventSubscriptionService);
         server.start();
 
-        var consumerService = new WebSocketConsumerService("ws://localhost:" + port);
+        ConsumerService consumerService = new WebSocketConsumerService("ws://localhost:" + port);
         consumerService.start();
 
-        var received = new AtomicBoolean(false);
-        var receivedGraph = new AtomicReference<Graph<Vertex, Edge>>(null);
-        var receivedAlarms = new AtomicReference<Collection<Alarm>>(null);
-        var receivedSituations = new AtomicReference<Collection<Situation>>(null);
+        AtomicBoolean received = new AtomicBoolean(false);
+        AtomicReference<Graph<Vertex, Edge>> receivedGraph = new AtomicReference<>(null);
+        AtomicReference<Collection<Alarm>> receivedAlarms = new AtomicReference<>(null);
+        AtomicReference<Collection<Situation>> receivedSituations = new AtomicReference<>(null);
         consumerService.accept(new NoOpConsumer() {
             @Override
             public void accept(Graph<Vertex, Edge> graph, Collection<Alarm> alarms, Collection<Situation> situations) {
@@ -158,18 +158,18 @@ public class ClientServerTest {
             await().atMost(1, TimeUnit.SECONDS).until(received::get);
 
             // Just containing the initial alarms
-            var receivedAlarmReductionKeys = receivedAlarms.get()
+            Set<String> receivedAlarmReductionKeys = receivedAlarms.get()
                     .stream()
                     .map(Alarm::getReductionKey)
                     .collect(Collectors.toSet());
-            var initialAlarmReductionKeys = initialAlarms.stream()
+            Set<String> initialAlarmReductionKeys = initialAlarms.stream()
                     .map(org.opennms.integration.api.v1.model.Alarm::getReductionKey)
                     .collect(Collectors.toSet());
             assertThat(initialAlarmReductionKeys, equalTo(receivedAlarmReductionKeys));
 
             // One situation containing all the initial alarms
             assertThat(receivedSituations.get(), hasSize(1));
-            var receivedFirstSituationRelatedReductionKeys = receivedSituations.get()
+            Set<String> receivedFirstSituationRelatedReductionKeys = receivedSituations.get()
                     .iterator()
                     .next()
                     .getRelatedAlarms()
@@ -178,17 +178,17 @@ public class ClientServerTest {
                     .collect(Collectors.toSet());
             assertThat(receivedFirstSituationRelatedReductionKeys, equalTo(initialAlarmReductionKeys));
 
-            var vertices = receivedGraph.get().getVertices();
+            Collection<Vertex> vertices = receivedGraph.get().getVertices();
             assertThat(vertices, hasSize(2));
-            var vertexIds = vertices.stream()
+            Set<Integer> vertexIds = vertices.stream()
                     .map(v -> Integer.parseInt(v.getId()))
                     .collect(Collectors.toSet());
             assertThat(vertexIds, hasItems(initialNodeA.getId(), initialNodeZ.getId()));
 
             // One edge connecting a to z
-            var edges = receivedGraph.get().getEdges();
+            Collection<Edge> edges = receivedGraph.get().getEdges();
             assertThat(edges, hasSize(1));
-            var edge = edges.iterator().next();
+            Edge edge = edges.iterator().next();
             assertThat(Integer.parseInt(edge.getSourceVertex().getId()), equalTo(initialNodeA.getId()));
             assertThat(Integer.parseInt(edge.getTargetVertex().getId()), equalTo(initialNodeZ.getId()));
         } finally {

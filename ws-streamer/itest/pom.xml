@@ -24,9 +24,6 @@
                             <value>org.spf4j.test.log.junit4.Spf4jTestLogRunListener</value>
                         </property>
                     </properties>
-                    <argLine>
-                        --illegal-access=permit
-                    </argLine>
                 </configuration>
             </plugin>
             <plugin>
@@ -34,7 +31,8 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.1</version>
                 <configuration>
-                    <release>11</release>
+                    <source>1.8</source>
+                    <target>1.8</target>
                 </configuration>
             </plugin>
         </plugins>
