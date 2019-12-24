@@ -18,6 +18,7 @@ import com.google.ar.sceneform.ux.ArFragment
 import org.opennms.arnet.app.mock.MockConsumerService
 import org.opennms.arnet.app.scene.NetworkNode
 import org.opennms.arnet.app.scene.RenderableRegistry
+import org.opennms.oia.streaming.client.WebSocketConsumerService
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.max
 import kotlin.math.min
@@ -30,7 +31,7 @@ class MainActivity : AppCompatActivity() {
     lateinit var fitToScanView: ImageView
     lateinit var renderables: RenderableRegistry
 
-   // private val consumerService = WebSocketConsumerService().apply { start() }
+//    private val consumerService = WebSocketConsumerService(serverUri).apply { start() }
     private val consumerService = MockConsumerService().apply { updateGraphOnBackgroundThread() }
 
     private val augmentedImageMap: MutableMap<AugmentedImage, NetworkNode> = HashMap()
@@ -153,5 +154,6 @@ class MainActivity : AppCompatActivity() {
 
     companion object {
         private val TAG = "MainActivity"
+        private val serverUri = "ws://172.20.50.148:8080"
     }
 }

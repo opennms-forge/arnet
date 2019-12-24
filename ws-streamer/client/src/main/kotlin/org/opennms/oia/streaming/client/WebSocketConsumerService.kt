@@ -5,6 +5,7 @@ import com.fasterxml.jackson.module.kotlin.readValue
 import com.google.common.collect.Maps
 import edu.uci.ics.jung.graph.Graph
 import edu.uci.ics.jung.graph.SparseMultigraph
+import org.java_websocket.client.WebSocketClient
 
 import org.java_websocket.handshake.ServerHandshake
 import org.opennms.integration.api.v1.model.*
@@ -24,10 +25,12 @@ import java.util.*
 
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.locks.ReentrantLock
+import kotlin.concurrent.withLock
 
 class WebSocketConsumerService(websocketUri: String) : ConsumerService {
 
-    private val client: WebSocketClient = WebSocketClient(URI(websocketUri))
+    private val client: WebSocketClient = StreamerClient(URI(websocketUri))
 
     private val consumers = CopyOnWriteArrayList<Consumer>()
 
@@ -37,7 +40,6 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
 
     private val edges = mutableMapOf<String, Edge>()
 
-    // TODO: Need to get this logging in android
     private val log = LoggerFactory.getLogger(WebSocketConsumerService::class.java)
 
     private var graph: Graph<Vertex, Edge> = SparseMultigraph()
@@ -45,8 +47,12 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
     private val initialAlarms = mutableListOf<org.opennms.oia.streaming.client.api.model.Alarm>()
 
     private val initialSituations = mutableListOf<Situation>()
-    
+
     private val initialized = AtomicBoolean(false)
+
+    private val initInProgress = AtomicBoolean(false)
+
+    private val cacheLock = ReentrantLock()
 
     override fun accept(consumer: Consumer) {
         log.info("Adding consumer.")
@@ -59,8 +65,14 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
 
         if (initialized.get()) {
             consumer.accept(graph, initialAlarms, initialSituations)
+        } else {
+            log.info("Initializing...")
+            if (!initInProgress.get()) {
+                initInProgress.set(true)
+                client.send(mapper.writeValueAsString(subscribeRequest()))
+            }
         }
-     }
+    }
 
     override fun dismiss(consumer: Consumer?) {
         log.info("Removing consumer.")
@@ -83,20 +95,27 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
         log.info("Stopping...")
 
         if (client.isOpen) {
+
+            // TODO: an error occurs on the server when unsubscribing...
+//            log.info("Sending unsubscribe.")
+//            client.send(mapper.writeValueAsString(unsubscribeRequest()))
+
             log.info("Closing client.")
             client.close()
         }
     }
 
-    inner class WebSocketClient(serverURI: URI) :
+    inner class StreamerClient(serverURI: URI) :
         org.java_websocket.client.WebSocketClient(serverURI) {
 
         override fun onOpen(handshakedata: ServerHandshake) {
             log.info("open: status '${handshakedata.httpStatus}'")
 
-           if (consumers.isNotEmpty()) {
-                client.send(mapper.writeValueAsString(subscribeRequest()))
-            }
+           if (!initInProgress.get() && consumers.isNotEmpty()) {
+               initInProgress.set(true)
+               log.info("Consumers are waiting: initializing...")
+               client.send(mapper.writeValueAsString(subscribeRequest()))
+           }
         }
 
         override fun onMessage(message: String) {
@@ -169,22 +188,28 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
         log.info("Processing edge ${edge.id}")
         val ve = convertTopologyEdge(edge)
 
-        consumers.forEach { consumer ->
+        cacheLock.withLock {
+            // TODO: support edge update?
+            if (edges.containsKey(ve.edge.id)) {
+                log.debug("Update to edge ${ve.edge.id}")
+                return
+            }
+
+            log.info("New edge ${ve.edge.id}")
+            edges[ve.edge.id] = ve.edge
+
+            // TODO: support vertex update?
+            if (!vertices.containsKey(ve.vertices.src.id)) {
+                vertices[ve.vertices.src.id] = ve.vertices.src
+            }
+            if (!vertices.containsKey(ve.vertices.dst.id)) {
+                vertices[ve.vertices.dst.id] = ve.vertices.dst
+            }
+        }
+
+        consumers.forEach {
             try {
-                if (edges.containsKey(ve.edge.id)) {
-                    log.debug("Update to edge ${ve.edge.id}")
-                    // TODO: is this supported?
-                } else {
-                    log.debug("New edge ${ve.edge.id}")
-                    edges.put(ve.edge.id, ve.edge)
-                    if (!vertices.containsKey(ve.vertices.src.id)) {
-                        vertices.put(ve.vertices.src.id, ve.vertices.src)
-                    }
-                    if (!vertices.containsKey(ve.vertices.dst.id)) {
-                        vertices.put(ve.vertices.dst.id, ve.vertices.dst)
-                    }
-                    consumer.acceptEdge(ve.edge)
-                }
+                it.acceptEdge(ve.edge)
             } catch (er : Error) {
                 log.warn("Consumer unable to process edge ${edge.id} : $er")
             }
@@ -194,16 +219,21 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
     fun processEdgeDelete(message: StreamMessage) {
         val edge = message.deserializePayload<TopologyEdge>()
         log.info("Processing edge delete ${edge.id}")
+        val ve = convertTopologyEdge(edge)
 
-        consumers.forEach { consumer ->
+        cacheLock.withLock {
+            if (!edges.containsKey(ve.edge.id)) {
+                log.debug("Edge ${ve.edge.id} does not exist")
+                return
+            }
+
+            log.info("Deleting edge ${ve.edge.id}")
+            edges.remove(ve.edge.id)
+        }
+
+        consumers.forEach {
             try {
-                if (!edges.containsKey(edge.id)) {
-                    log.debug("Edge ${edge.id} does not exist")
-                } else {
-                    log.info("Deleting edge ${edge.id}")
-                    edges.remove(edge.id)
-                    consumer.acceptDeletedEdge(edge.id)
-                }
+                it.acceptDeletedEdge(ve.edge.id)
             } catch (er : Error) {
                 log.warn("Consumer unable to process edge delete ${edge.id} : $er")
             }
@@ -226,71 +256,73 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
         log.info("Processing topology")
         val topology = message.deserializePayload<Topology>()
 
-        edges.clear()
-        vertices.clear()
-        initialAlarms.clear()
-        initialSituations.clear()
-        graph = SparseMultigraph<Vertex, Edge>()
+        cacheLock.withLock {
+            edges.clear()
+            vertices.clear()
+            initialAlarms.clear()
+            initialSituations.clear()
+            graph = SparseMultigraph<Vertex, Edge>()
 
-        // Handles node that appear directly in Topology
-        val verticesNodes = topology.nodes
-            ?.map { n -> convertNode(n) }
-            ?.map { it.id to it }
-            ?.toMap()
-            ?.toMutableMap()
+            // Handles node that appear directly in Topology
+            val verticesNodes = topology.nodes
+                ?.map { n -> convertNode(n) }
+                ?.map { it.id to it }
+                ?.toMap()
+                ?.toMutableMap()
 
-        // Handles node, port, and segment in each TopologyEdge
-        val verticesTopologyEdge = mutableMapOf<String, Vertex>()
-        topology.edges?.forEach {
-            val ve = convertTopologyEdge(it)
-            edges.put(ve.edge.id, ve.edge)
-            if (!verticesTopologyEdge.containsKey(ve.vertices.src.id)) {
-                verticesTopologyEdge.put(ve.vertices.src.id, ve.vertices.src)
+            // Handles node, port, and segment in each TopologyEdge
+            val verticesTopologyEdge = mutableMapOf<String, Vertex>()
+            topology.edges?.forEach {
+                val ve = convertTopologyEdge(it)
+                edges[ve.edge.id] = ve.edge
+                if (!verticesTopologyEdge.containsKey(ve.vertices.src.id)) {
+                    verticesTopologyEdge[ve.vertices.src.id] = ve.vertices.src
+                }
+                if (!verticesTopologyEdge.containsKey(ve.vertices.dst.id)) {
+                    verticesTopologyEdge[ve.vertices.dst.id] = ve.vertices.dst
+                }
             }
-            if (!verticesTopologyEdge.containsKey(ve.vertices.dst.id)) {
-                verticesTopologyEdge.put(ve.vertices.dst.id, ve.vertices.dst)
+
+            // A Map of all vertices in the topology
+            if (verticesNodes != null) {
+                vertices.putAll(verticesNodes)
+            }
+            vertices.putAll(verticesTopologyEdge)
+
+            if (verticesNodes != null) {
+                // Contains all "island" nodes (a node without edges)
+                val diff = Maps.difference(verticesTopologyEdge, verticesNodes).entriesOnlyOnRight()
+
+                // Add "island" nodes (vertices) to the graph
+                diff.forEach { graph.addVertex(it.value) }
+            }
+
+            // Add nodes and edges to graph
+            edges.values.forEach { graph.addEdge(it, it.sourceVertex, it.targetVertex) }
+
+            val alarms = topology.alarms?.filter { !it.isSituation }?.map { convertAlarm(it) }
+            if (alarms != null) {
+                initialAlarms.addAll(alarms)
+            }
+
+            val situations = topology.alarms?.filter { it.isSituation }?.map { convertSituation(it) }
+            if (situations != null) {
+                initialSituations.addAll(situations)
+            }
+
+            log.info("Graph contains ${graph.vertexCount} vertices, " +
+                    "${graph.edgeCount} edges, ${alarms?.size} alarms, " +
+                    "and ${situations?.size} situations")
+
+            consumers.forEach {
+                try {
+                    it.accept(graph, initialAlarms, initialSituations)
+                } catch (e: Error) {
+                    log.warn("Consumer unable to process topology : $e")
+                }
             }
         }
 
-        // A Map of all vertices in the topology
-        if (verticesNodes != null) {
-            vertices.putAll(verticesNodes)
-        }
-        vertices.putAll(verticesTopologyEdge)
-
-        if (verticesNodes != null) {
-            // Contains all "island" nodes (a node without edges)
-            val diff = Maps.difference(verticesTopologyEdge, verticesNodes).entriesOnlyOnRight()
-
-            // Add "island" nodes (vertices) to the graph
-            diff.forEach { graph.addVertex(it.value) }
-        }
-
-        // Add nodes and edges to graph
-        edges.values.forEach { graph.addEdge(it, it.sourceVertex, it.targetVertex) }
-
-        val alarms = topology.alarms?.filter { !it.isSituation }?.map { convertAlarm(it) }
-        if (alarms != null) {
-            initialAlarms.addAll(alarms)
-        }
-
-        val situations = topology.alarms?.filter { it.isSituation }?.map { convertSituation(it) }
-        if (situations != null) {
-            initialSituations.addAll(situations)
-        }
-
-        log.info("Graph contains ${graph.vertexCount} vertices " +
-                "and ${graph.edgeCount} edges. There are ${alarms?.size} alarms " +
-                "and situations ${situations?.size}")
-
-        consumers.forEach {
-            try {
-                it.accept(graph, initialAlarms, initialSituations)
-            } catch (e: Error) {
-                log.warn("Consumer unable to process topology : $e")
-            }
-        }
-        
         initialized.set(true)
     }
 
@@ -298,16 +330,21 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
         val node = message.deserializePayload<Node>()
         log.info("Processing node ${node.id}")
         val convNode = convertNode(node)
+
+        cacheLock.withLock {
+            // TODO: support node update?
+            if (vertices.containsKey(convNode.id)) {
+                log.debug("Update to node ${convNode.id}")
+                return
+            }
+
+            log.info("New vertex ${convNode.id}")
+            vertices.put(convNode.id, convNode)
+        }
+
         consumers.forEach {
             try {
-                if (vertices.containsKey(convNode.id)) {
-                    log.debug("Update to node ${convNode.id}")
-                    // TODO: is this supported?
-                } else {
-                    log.debug("New vertex ${convNode.id}")
-                    vertices.put(convNode.id, convNode)
-                    it.acceptVertex(convNode)
-                }
+                it.acceptVertex(convNode)
             } catch (e: Error) {
                 log.warn("Consumer unable to process node ${node.id} : $e")
             }
@@ -500,11 +537,6 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
     }
 
     // For unit testing...
-    fun addConsumer(consumer: Consumer) {
-        consumers.add(consumer)
-    }
-
-    // For unit testing...
     fun numEdges() : Int {
         return edges.size
     }
@@ -512,6 +544,12 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
     // For unit testing...
     fun numVertices() : Int {
         return vertices.size
+    }
+
+    // For unit testing...
+    // TODO: get rid of this... mock the client instead, so that accept() can be used.
+    fun addConsumer(consumer: Consumer) {
+        consumers.add(consumer)
     }
     
     private companion object {

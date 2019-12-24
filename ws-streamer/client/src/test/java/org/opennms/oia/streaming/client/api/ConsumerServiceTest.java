@@ -5,34 +5,16 @@ import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.opennms.integration.api.v1.config.events.AlarmType;
-import org.opennms.integration.api.v1.model.DatabaseEvent;
-import org.opennms.integration.api.v1.model.IpInterface;
-import org.opennms.integration.api.v1.model.MetaData;
-import org.opennms.integration.api.v1.model.Node;
-import org.opennms.integration.api.v1.model.NodeAssetRecord;
-import org.opennms.integration.api.v1.model.NodeCriteria;
-import org.opennms.integration.api.v1.model.Severity;
-import org.opennms.integration.api.v1.model.SnmpInterface;
-import org.opennms.integration.api.v1.model.TopologyEdge;
-import org.opennms.integration.api.v1.model.TopologyPort;
-import org.opennms.integration.api.v1.model.TopologyProtocol;
-import org.opennms.integration.api.v1.model.TopologySegment;
+import org.opennms.integration.api.v1.model.*;
+import org.opennms.oia.streaming.client.api.model.*;
+import org.opennms.oia.streaming.client.api.model.Alarm;
 import org.opennms.oia.streaming.model.AlarmDelete;
 import org.opennms.oia.streaming.client.WebSocketConsumerService;
-import org.opennms.oia.streaming.client.api.model.Alarm;
-import org.opennms.oia.streaming.client.api.model.Edge;
-import org.opennms.oia.streaming.client.api.model.Situation;
-import org.opennms.oia.streaming.client.api.model.Vertex;
 import org.opennms.oia.streaming.model.MessageType;
 import org.opennms.oia.streaming.model.StreamMessage;
 import org.opennms.oia.streaming.model.Topology;
 
-import java.util.Collection;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 import edu.uci.ics.jung.graph.Graph;
 
@@ -40,8 +22,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.anyObject;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 public class ConsumerServiceTest {
 
@@ -81,7 +62,7 @@ public class ConsumerServiceTest {
 
     @Test
     public void testAlarm() {
-        ArgumentCaptor<Alarm> alarmCap = ArgumentCaptor.forClass((Class) Graph.class);
+        ArgumentCaptor<Alarm> alarmCap = ArgumentCaptor.forClass((Class) Alarm.class);
 
         wsConsumer.addConsumer(consumer);
 
@@ -119,6 +100,9 @@ public class ConsumerServiceTest {
         wsConsumer.processTopology(generateTopology());
         wsConsumer.addConsumer(consumer);
 
+        int numEdgesOrig = wsConsumer.numEdges();
+        int numVerticesOrig = wsConsumer.numVertices();
+
         Node existingNode = generateNode(10, "node-10-label");
         Node newNode = generateNode(50, "node-50-label");
 
@@ -129,6 +113,9 @@ public class ConsumerServiceTest {
         verify(consumer, times(1)).acceptVertex(vertexCap.capture());
 
         assertEquals(newNode.getId().toString(), vertexCap.getValue().getId());
+
+        assertEquals(numEdgesOrig, wsConsumer.numEdges());
+        assertEquals(numVerticesOrig + 1, wsConsumer.numVertices());
     }
 
     @Test
@@ -138,8 +125,11 @@ public class ConsumerServiceTest {
         wsConsumer.processTopology(generateTopology());
         wsConsumer.addConsumer(consumer);
 
+        int numEdgesOrig = wsConsumer.numEdges();
+        int numVerticesOrig = wsConsumer.numVertices();
+
         // Add edge that contains one vertex already in graph and one that is new.
-        TopologyEdge edge = generateTopologyEdge("edge-6",
+        TopologyEdge edge = generateTopologyEdge("edge-6", TopologyProtocol.ALL,
                 generateNode(25, "node-25-label"), TopologyEdge.EndpointType.NODE,
                 generatePort(26), TopologyEdge.EndpointType.PORT);
 
@@ -148,32 +138,117 @@ public class ConsumerServiceTest {
         verify(consumer, times(1)).acceptEdge(edgeCap.capture());
 
         assertEquals(edge.getId() + "-" + edge.getProtocol(), edgeCap.getValue().getId());
+        assertEquals(edge.getProtocol().name(), edgeCap.getValue().getProtocol());
         assertEquals("25", edgeCap.getValue().getSourceVertex().getId());
         assertEquals("26", edgeCap.getValue().getTargetVertex().getId());
 
-        assertEquals(6, wsConsumer.numEdges());
-        assertEquals(9, wsConsumer.numVertices());
+        assertEquals(numEdgesOrig + 1, wsConsumer.numEdges());
+        assertEquals(numVerticesOrig + 1, wsConsumer.numVertices());
     }
 
     @Test
-    public void testEdgeAddDuplicate() {
+    public void testEdgeAddAllNew() {
         ArgumentCaptor<Edge> edgeCap = ArgumentCaptor.forClass((Class) Edge.class);
 
         wsConsumer.processTopology(generateTopology());
         wsConsumer.addConsumer(consumer);
 
+        int numEdgesOrig = wsConsumer.numEdges();
+        int numVerticesOrig = wsConsumer.numVertices();
+
+        // Add edge where both vertices don't already exist in graph
+        TopologyEdge edge = generateTopologyEdge("edge-50", TopologyProtocol.ALL,
+                generateNode(50, "node-50-label"), TopologyEdge.EndpointType.NODE,
+                generatePort(51), TopologyEdge.EndpointType.PORT);
+
+        wsConsumer.processEdge(new StreamMessage(MessageType.Edge, edge));
+
+        verify(consumer, times(1)).acceptEdge(edgeCap.capture());
+
+        assertEquals(edge.getId() + "-" + edge.getProtocol(), edgeCap.getValue().getId());
+        assertEquals(edge.getProtocol().name(), edgeCap.getValue().getProtocol());
+        assertEquals("50", edgeCap.getValue().getSourceVertex().getId());
+        assertEquals("51", edgeCap.getValue().getTargetVertex().getId());
+
+        assertEquals(numEdgesOrig + 1, wsConsumer.numEdges());
+        assertEquals(numVerticesOrig + 2, wsConsumer.numVertices());
+    }
+
+    @Test
+    public void testEdgeAddDuplicate() {
+        wsConsumer.processTopology(generateTopology());
+        wsConsumer.addConsumer(consumer);
+
+        int numEdgesOrig = wsConsumer.numEdges();
+        int numVerticesOrig = wsConsumer.numVertices();
+
         // Add edge that is a duplicate.
-        TopologyEdge edge = generateTopologyEdge("edge-5",
+        TopologyEdge edge = generateTopologyEdge("edge-5", TopologyProtocol.ALL,
                 generatePort(24), TopologyEdge.EndpointType.PORT,
                 generateNode(25, "node-25-label"), TopologyEdge.EndpointType.NODE);
 
         wsConsumer.processEdge(new StreamMessage(MessageType.Edge, edge));
 
-        verify(consumer, times(0)).acceptEdge(
-                anyObject());
+        verify(consumer, times(0)).acceptEdge(anyObject());
+        assertEquals(numEdgesOrig, wsConsumer.numEdges());
+        assertEquals(numVerticesOrig, wsConsumer.numVertices());
+    }
 
-        assertEquals(5, wsConsumer.numEdges());
-        assertEquals(8, wsConsumer.numVertices());
+    @Test
+    public void testEdgeDelete() {
+        ArgumentCaptor<String> edgeIdCap = ArgumentCaptor.forClass((Class) String.class);
+
+        wsConsumer.processTopology(generateTopology());
+        wsConsumer.addConsumer(consumer);
+
+        int numEdgesOrig = wsConsumer.numEdges();
+        int numVerticesOrig = wsConsumer.numVertices();
+
+        // Remove an existing edge
+        TopologyEdge edge = generateTopologyEdge("edge-5", TopologyProtocol.ALL,
+                generatePort(24), TopologyEdge.EndpointType.PORT,
+                generateNode(25, "node-25-label"), TopologyEdge.EndpointType.NODE);
+
+        wsConsumer.processEdgeDelete(new StreamMessage(MessageType.EdgeDelete, edge));
+
+        verify(consumer, times(1)).acceptDeletedEdge(edgeIdCap.capture());
+        assertEquals(edge.getId() + "-" + edge.getProtocol().name(), edgeIdCap.getValue());
+        assertEquals(numEdgesOrig - 1, wsConsumer.numEdges());
+        assertEquals(numVerticesOrig, wsConsumer.numVertices());
+    }
+
+    @Test
+    public void testEdgeDeleteNonExistent() {
+        wsConsumer.processTopology(generateTopology());
+        wsConsumer.addConsumer(consumer);
+
+        int numEdgesOrig = wsConsumer.numEdges();
+        int numVerticesOrig = wsConsumer.numVertices();
+
+        // Remove an edge that does not exist
+        TopologyEdge edge = generateTopologyEdge("edge-9", TopologyProtocol.ALL,
+                generateNode(25, "node-25-label"), TopologyEdge.EndpointType.NODE,
+                generateNode(20, "node-20-label"), TopologyEdge.EndpointType.NODE);
+
+        wsConsumer.processEdgeDelete(new StreamMessage(MessageType.EdgeDelete, edge));
+
+        verify(consumer, times(0)).acceptDeletedEdge(any());
+        assertEquals(numEdgesOrig, wsConsumer.numEdges());
+        assertEquals(numVerticesOrig, wsConsumer.numVertices());
+    }
+
+    @Test
+    public void testEvent() {
+        ArgumentCaptor<Event> eventCap = ArgumentCaptor.forClass((Class) Event.class);
+
+        wsConsumer.addConsumer(consumer);
+
+        InMemoryEvent event = generateEvent("test-uei", 10);
+        wsConsumer.processEvent(new StreamMessage(MessageType.Event, event));
+
+        verify(consumer, times(1)).acceptEvent(eventCap.capture());
+        assertEquals(event.getUei(), eventCap.getValue().getUEI());
+        assertEquals(event.getNodeId().toString(), eventCap.getValue().getVertexId());
     }
 
     private StreamMessage generateTopology() {
@@ -194,23 +269,23 @@ public class ConsumerServiceTest {
         nodes.add(generateNode(20, "node-20-label"));
 
         // Add x6 nodes with x5 vertices
-        edges.add(generateTopologyEdge("edge-1",
+        edges.add(generateTopologyEdge("edge-1", TopologyProtocol.ALL,
                 generateNode(20, "node-20-label"), TopologyEdge.EndpointType.NODE,
                 generateNode(21, "node-21-label"), TopologyEdge.EndpointType.NODE));
 
-        edges.add(generateTopologyEdge("edge-2",
+        edges.add(generateTopologyEdge("edge-2", TopologyProtocol.ALL,
                 generateNode(20, "node-20-label"), TopologyEdge.EndpointType.NODE,
                 generatePort(22), TopologyEdge.EndpointType.PORT));
 
-        edges.add(generateTopologyEdge("edge-3",
+        edges.add(generateTopologyEdge("edge-3", TopologyProtocol.ALL,
                 generatePort(22), TopologyEdge.EndpointType.PORT,
                 generateSegment(23), TopologyEdge.EndpointType.SEGMENT));
 
-        edges.add(generateTopologyEdge("edge-4",
+        edges.add(generateTopologyEdge("edge-4", TopologyProtocol.ALL,
                 generateSegment(23), TopologyEdge.EndpointType.SEGMENT,
                 generatePort(24), TopologyEdge.EndpointType.PORT));
 
-        edges.add(generateTopologyEdge("edge-5",
+        edges.add(generateTopologyEdge("edge-5", TopologyProtocol.ALL,
                 generatePort(24), TopologyEdge.EndpointType.PORT,
                 generateNode(25, "node-25-label"), TopologyEdge.EndpointType.NODE));
 
@@ -349,13 +424,13 @@ public class ConsumerServiceTest {
         };
     }
 
-    private TopologyEdge generateTopologyEdge(String id,
+    private TopologyEdge generateTopologyEdge(String id, TopologyProtocol protocol,
                                               Object srcNode, TopologyEdge.EndpointType srcType,
                                               Object dstNode, TopologyEdge.EndpointType dstType) {
         return new TopologyEdge() {
             @Override
             public TopologyProtocol getProtocol() {
-                return TopologyProtocol.OSPF;
+                return protocol;
             }
 
             @Override
@@ -454,5 +529,44 @@ public class ConsumerServiceTest {
                 return null;
             }
         };
+    }
+
+    private InMemoryEvent generateEvent(String uei, Integer nodeId) {
+       return new InMemoryEvent() {
+           @Override
+           public String getUei() {
+               return uei;
+           }
+
+           @Override
+           public String getSource() {
+               return null;
+           }
+
+           @Override
+           public Severity getSeverity() {
+               return null;
+           }
+
+           @Override
+           public Integer getNodeId() {
+               return nodeId;
+           }
+
+           @Override
+           public List<EventParameter> getParameters() {
+               return null;
+           }
+
+           @Override
+           public Optional<String> getParameterValue(String s) {
+               return Optional.empty();
+           }
+
+           @Override
+           public List<EventParameter> getParametersByName(String s) {
+               return null;
+           }
+       };
     }
 }
