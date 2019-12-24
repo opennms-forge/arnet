@@ -1,4 +1,4 @@
-package org.opennms.oia.streaming.client.api;
+package org.opennms.oia.streaming.client;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -6,10 +6,10 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
 import org.opennms.integration.api.v1.config.events.AlarmType;
 import org.opennms.integration.api.v1.model.*;
+import org.opennms.oia.streaming.client.api.Consumer;
 import org.opennms.oia.streaming.client.api.model.*;
 import org.opennms.oia.streaming.client.api.model.Alarm;
 import org.opennms.oia.streaming.model.AlarmDelete;
-import org.opennms.oia.streaming.client.WebSocketConsumerService;
 import org.opennms.oia.streaming.model.MessageType;
 import org.opennms.oia.streaming.model.StreamMessage;
 import org.opennms.oia.streaming.model.Topology;
@@ -41,7 +41,7 @@ public class ConsumerServiceTest {
         ArgumentCaptor<List<Alarm>> alarmCap = ArgumentCaptor.forClass((Class) List.class);
         ArgumentCaptor<List<Situation>> situationCap = ArgumentCaptor.forClass((Class) List.class);
 
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
         wsConsumer.processTopology(generateTopology());
 
         verify(consumer, times(1)).accept(
@@ -64,7 +64,7 @@ public class ConsumerServiceTest {
     public void testAlarm() {
         ArgumentCaptor<Alarm> alarmCap = ArgumentCaptor.forClass((Class) Alarm.class);
 
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
 
         org.opennms.integration.api.v1.model.Alarm alarm =
                 generateAlarm(101, "reduc-key-101", false);
@@ -80,7 +80,7 @@ public class ConsumerServiceTest {
     public void testAlarmDelete() {
         ArgumentCaptor<String> alarmCap = ArgumentCaptor.forClass((Class) String.class);
 
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
 
         org.opennms.integration.api.v1.model.Alarm alarm =
                 generateAlarm(101, "reduc-key-1", false);
@@ -98,7 +98,7 @@ public class ConsumerServiceTest {
         ArgumentCaptor<Vertex> vertexCap = ArgumentCaptor.forClass((Class) Vertex.class);
 
         wsConsumer.processTopology(generateTopology());
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
 
         int numEdgesOrig = wsConsumer.numEdges();
         int numVerticesOrig = wsConsumer.numVertices();
@@ -123,7 +123,7 @@ public class ConsumerServiceTest {
         ArgumentCaptor<Edge> edgeCap = ArgumentCaptor.forClass((Class) Edge.class);
 
         wsConsumer.processTopology(generateTopology());
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
 
         int numEdgesOrig = wsConsumer.numEdges();
         int numVerticesOrig = wsConsumer.numVertices();
@@ -151,7 +151,7 @@ public class ConsumerServiceTest {
         ArgumentCaptor<Edge> edgeCap = ArgumentCaptor.forClass((Class) Edge.class);
 
         wsConsumer.processTopology(generateTopology());
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
 
         int numEdgesOrig = wsConsumer.numEdges();
         int numVerticesOrig = wsConsumer.numVertices();
@@ -177,7 +177,7 @@ public class ConsumerServiceTest {
     @Test
     public void testEdgeAddDuplicate() {
         wsConsumer.processTopology(generateTopology());
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
 
         int numEdgesOrig = wsConsumer.numEdges();
         int numVerticesOrig = wsConsumer.numVertices();
@@ -199,7 +199,7 @@ public class ConsumerServiceTest {
         ArgumentCaptor<String> edgeIdCap = ArgumentCaptor.forClass((Class) String.class);
 
         wsConsumer.processTopology(generateTopology());
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
 
         int numEdgesOrig = wsConsumer.numEdges();
         int numVerticesOrig = wsConsumer.numVertices();
@@ -220,7 +220,7 @@ public class ConsumerServiceTest {
     @Test
     public void testEdgeDeleteNonExistent() {
         wsConsumer.processTopology(generateTopology());
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
 
         int numEdgesOrig = wsConsumer.numEdges();
         int numVerticesOrig = wsConsumer.numVertices();
@@ -241,7 +241,7 @@ public class ConsumerServiceTest {
     public void testEvent() {
         ArgumentCaptor<Event> eventCap = ArgumentCaptor.forClass((Class) Event.class);
 
-        wsConsumer.addConsumer(consumer);
+        wsConsumer.accept(consumer);
 
         InMemoryEvent event = generateEvent("test-uei", 10);
         wsConsumer.processEvent(new StreamMessage(MessageType.Event, event));

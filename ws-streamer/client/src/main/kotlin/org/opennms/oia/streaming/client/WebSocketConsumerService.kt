@@ -6,7 +6,6 @@ import com.google.common.collect.Maps
 import edu.uci.ics.jung.graph.Graph
 import edu.uci.ics.jung.graph.SparseMultigraph
 import org.java_websocket.client.WebSocketClient
-
 import org.java_websocket.handshake.ServerHandshake
 import org.opennms.integration.api.v1.model.*
 import org.opennms.oia.streaming.client.api.Consumer
@@ -18,7 +17,6 @@ import org.opennms.oia.streaming.model.*
 import org.slf4j.LoggerFactory
 import java.io.PrintWriter
 import java.io.StringWriter
-
 import java.net.URI
 import java.nio.ByteBuffer
 import java.util.*
@@ -50,27 +48,18 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
 
     private val initialized = AtomicBoolean(false)
 
-    private val initInProgress = AtomicBoolean(false)
-
     private val cacheLock = ReentrantLock()
 
     override fun accept(consumer: Consumer) {
         log.info("Adding consumer.")
         consumers.add(consumer)
 
-        // TODO: only supporting a single consumer
-        //  If multiple consumers were to be supported, the first consumer subscribes - with
-        //  subsequent consumers refreshing the topology. The server side would need to support
-        //  a topology refresh operation.
-
+        // TODO: a "refresh topology" operation is needed to guarantee that up-to-date information
+        //  is provided to the consumer.  As the code is now, (potentially) stale data is provided.
+        //  E.g. the data is "fresh" at the time of server connect, but likely not at the time
+        //  the consumer connects, which can be quite some time later...
         if (initialized.get()) {
             consumer.accept(graph, initialAlarms, initialSituations)
-        } else {
-            log.info("Initializing...")
-            if (!initInProgress.get()) {
-                initInProgress.set(true)
-                client.send(mapper.writeValueAsString(subscribeRequest()))
-            }
         }
     }
 
@@ -110,12 +99,7 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
 
         override fun onOpen(handshakedata: ServerHandshake) {
             log.info("open: status '${handshakedata.httpStatus}'")
-
-           if (!initInProgress.get() && consumers.isNotEmpty()) {
-               initInProgress.set(true)
-               log.info("Consumers are waiting: initializing...")
-               client.send(mapper.writeValueAsString(subscribeRequest()))
-           }
+            client.send(mapper.writeValueAsString(subscribeRequest()))
         }
 
         override fun onMessage(message: String) {
@@ -351,7 +335,7 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
         }
     }
 
-    fun convertTopologyEdge(topologyEdge : TopologyEdge) : EdgeVertex {
+    private fun convertTopologyEdge(topologyEdge : TopologyEdge) : EdgeVertex {
 
         lateinit var srcVertex: Vertex
         lateinit var dstVertex: Vertex
@@ -450,7 +434,7 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
 
     data class VertexPair(val src: Vertex, val dst: Vertex)
 
-    fun convertAlarm(alarm: Alarm) = object : org.opennms.oia.streaming.client.api.model.Alarm {
+    private fun convertAlarm(alarm: Alarm) = object : org.opennms.oia.streaming.client.api.model.Alarm {
             override fun getReductionKey(): String {
                 return alarm.reductionKey
             }
@@ -474,7 +458,7 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
             }
         }
 
-    fun convertEvent(event: InMemoryEvent) = object : org.opennms.oia.streaming.client.api.model.Event {
+    private fun convertEvent(event: InMemoryEvent) = object : org.opennms.oia.streaming.client.api.model.Event {
         override fun getUEI(): String {
             return event.uei
         }
@@ -494,7 +478,7 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
         }
     }
 
-    fun convertSituation(situation: Alarm) = object : Situation {
+    private fun convertSituation(situation: Alarm) = object : Situation {
         override fun getReductionKey(): String {
             return situation.reductionKey
         }
@@ -522,34 +506,28 @@ class WebSocketConsumerService(websocketUri: String) : ConsumerService {
         }
     }
 
-    fun convertNode(node: Node) : Vertex {
+    private fun convertNode(node: Node) : Vertex {
         return VertexImpl(id = node.id.toString(), label = node.label, type = Vertex.Type.Node)
     }
 
-    fun convertPort(port: TopologyPort) : Vertex {
+    private fun convertPort(port: TopologyPort) : Vertex {
         // TODO: can "label" be generated?
         return VertexImpl(id = port.id.toString(), label = "", type = Vertex.Type.Port)
     }
 
-    fun convertSegment(segment: TopologySegment) : Vertex {
+    private fun convertSegment(segment: TopologySegment) : Vertex {
         // TODO: can "label" be generated?
         return VertexImpl(id = segment.id.toString(), label = "", type = Vertex.Type.Segment)
     }
 
     // For unit testing...
-    fun numEdges() : Int {
+    protected fun numEdges() : Int {
         return edges.size
     }
 
     // For unit testing...
-    fun numVertices() : Int {
+    protected fun numVertices() : Int {
         return vertices.size
-    }
-
-    // For unit testing...
-    // TODO: get rid of this... mock the client instead, so that accept() can be used.
-    fun addConsumer(consumer: Consumer) {
-        consumers.add(consumer)
     }
     
     private companion object {
